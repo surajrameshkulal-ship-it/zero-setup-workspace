@@ -1,0 +1,17 @@
+.git
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+node_modules/
+.next/
+dist/
+build/
+coverage/
+.DS_Store
