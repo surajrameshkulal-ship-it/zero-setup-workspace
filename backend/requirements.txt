@@ -1,3 +1,4 @@
 # Dependency definitions live in ../pyproject.toml.
 # This compatibility file installs the backend package from the repository root.
 -e ..
+redis>=5.0.0

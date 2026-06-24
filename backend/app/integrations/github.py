@@ -192,7 +192,7 @@ class GitHubIntegration:
             payload["output"] = output
         logger.info(
             "github_check_run_create",
-            extra={"owner": owner, "repo": repo, "name": name, "head_sha": head_sha, "status": status},
+            extra={"owner": owner, "repo": repo, "check_run_name": name, "head_sha": head_sha, "status": status},
         )
         response = self._request(
             "POST",
@@ -207,7 +207,7 @@ class GitHubIntegration:
             extra={
                 "owner": owner,
                 "repo": repo,
-                "name": name,
+                "check_run_name": name,
                 "head_sha": head_sha,
                 "status_code": response.status_code,
                 "check_run_id": result.get("id"),
