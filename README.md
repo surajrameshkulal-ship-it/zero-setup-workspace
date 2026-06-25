@@ -1,6 +1,6 @@
 # CodeDNA AI
 
-CodeDNA AI is an AI Engineering Governance Platform for corporate software teams. This MVP backend reviews GitHub pull requests, runs Semgrep, applies company and architecture rules, calculates risk scores, stores audit-ready reports, and comments back on GitHub PRs.
+CodeDNA AI is an AI Engineering Governance Platform for corporate software teams. It reviews every GitHub pull request automatically — running Semgrep static analysis, applying company and architecture rules, generating an AI code review, calculating a risk score, storing audit-ready reports, and surfacing results in GitHub Check Runs and a Next.js dashboard.
 
 ## Stack
 
@@ -8,10 +8,13 @@ CodeDNA AI is an AI Engineering Governance Platform for corporate software teams
 - Frontend: Next.js + Tailwind CSS
 - Database: PostgreSQL
 - Background jobs: Celery + Redis
-- AI review: OpenAI API
+- AI review: Groq (OpenAI-compatible API); local Ollama supported
 - Static analysis: Semgrep
 - Auth: JWT
+- GitHub: GitHub App, webhooks, Check Runs
 - Deployment: Docker Compose
+
+> The AI provider is configurable via `AI_PROVIDER` (`groq` by default). The client uses the OpenAI-compatible API surface, so `OPENAI_API_KEY`/`GROQ_API_KEY` and the matching model variables select the backend. AI review can be disabled entirely with `AI_REVIEW_ENABLED=false`.
 
 ## Project Structure
 
@@ -120,6 +123,27 @@ Email: admin@codedna.ai
 Password: Admin@123
 ```
 
+### Demo data
+
+To populate the dashboard, repository, and scan views with realistic, lifelike
+data for a demonstration, run the seed script after migrations:
+
+```bash
+python -m app.scripts.seed_demo_data
+```
+
+This provisions a demo organization and admin user plus a deterministic set of
+repositories and pull-request scans (varied status, risk, findings, and AI
+review summaries). It is idempotent — re-running regenerates the same known data
+set; pass `--reset` to remove demo repositories first.
+
+Default demo credentials:
+
+```text
+Email: demo@codedna.ai
+Password: Demo@12345
+```
+
 Install and run the frontend in another terminal:
 
 ```bash
@@ -132,11 +156,23 @@ npm run dev
 Open the API:
 
 - Health: http://localhost:8000/health
+- API health: http://localhost:8000/api/v1/health
 - Docs in development: http://localhost:8000/docs
+
+Operations and admin endpoints (Phase 6 hardening):
+
+- `GET /health` and `GET /api/v1/health` — application, PostgreSQL, Redis, and Celery queue checks
+- `GET /api/v1/admin/queue-metrics` — Redis queue depth and dead-letter count
+- `GET /api/v1/admin/dead-letter-scans` — scans that exhausted retries
 
 Open the dashboard:
 
 - Frontend: http://localhost:3000
+
+The dashboard opens on a public landing page at `/` with a sign-in flow; once
+authenticated it provides an overview dashboard (metrics, risk, health, and
+queue cards), repository and scan history views, scan detail with the rendered
+AI review, a rules manager, and admin pages for queue metrics and dead letters.
 
 ## Test Execution
 
