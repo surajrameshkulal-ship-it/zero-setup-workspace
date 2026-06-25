@@ -14,6 +14,7 @@ from app.models.execution_plan import (
     ExecutionPlan,
     ExecutionSafetyStatus,
 )
+from app.models.execution_run import ExecutionRun
 from app.models.github import GitHubInstallation
 from app.models.organization import Organization
 from app.models.repository import Repository
@@ -36,6 +37,7 @@ __all__ = [
     "EngineeringRequest",
     "ExecutionComplexity",
     "ExecutionPlan",
+    "ExecutionRun",
     "ExecutionSafetyStatus",
     "GitHubInstallation",
     "Organization",
