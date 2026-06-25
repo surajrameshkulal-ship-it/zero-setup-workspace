@@ -7,6 +7,11 @@ from app.models.engineering_request import (
     RequestStatus,
     RequestType,
 )
+from app.models.execution_plan import (
+    ExecutionComplexity,
+    ExecutionPlan,
+    ExecutionSafetyStatus,
+)
 from app.models.github import GitHubInstallation
 from app.models.organization import Organization
 from app.models.repository import Repository
@@ -23,6 +28,9 @@ __all__ = [
     "CompanyRule",
     "CompanyRuleType",
     "EngineeringRequest",
+    "ExecutionComplexity",
+    "ExecutionPlan",
+    "ExecutionSafetyStatus",
     "GitHubInstallation",
     "Organization",
     "PullRequestScan",

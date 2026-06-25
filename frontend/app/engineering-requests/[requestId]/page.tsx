@@ -2,20 +2,47 @@
 
 import Link from "next/link";
 import { use, useCallback, useState } from "react";
-import { ArrowLeft, Ban, CheckCircle2, Play, ShieldAlert, ShieldCheck } from "lucide-react";
+import clsx from "clsx";
+import {
+  ArrowLeft,
+  Ban,
+  CheckCircle2,
+  Cpu,
+  FileCode2,
+  Play,
+  ShieldAlert,
+  ShieldCheck
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PriorityBadge, RequestStatusBadge, RiskBadge } from "@/components/badges";
 import { EmptyState, ErrorState, LoadingState } from "@/components/data-state";
 import {
   analyzeEngineeringRequest,
   approveEngineeringRequestPlan,
+  generateExecutionPlan,
   getEngineeringRequest,
+  getExecutionPlan,
   rejectEngineeringRequestPlan
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { useApiResource } from "@/hooks/use-api-resource";
+import type { ExecutionSafetyStatus } from "@/types/api";
 
 const ANALYZABLE = new Set(["submitted", "plan_ready", "rejected", "failed"]);
+
+const SAFETY_STATUS_CLASS: Record<ExecutionSafetyStatus, string> = {
+  safe: "border-emerald-300 bg-emerald-50 text-emerald-800",
+  needs_approval: "border-amber-300 bg-amber-50 text-amber-800",
+  blocked: "border-rose-300 bg-rose-50 text-rose-800"
+};
+
+function SafetyStatusBadge({ status }: { status: ExecutionSafetyStatus }) {
+  return (
+    <span className={clsx("inline-flex rounded border px-2 py-0.5 text-xs font-medium", SAFETY_STATUS_CLASS[status])}>
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -50,6 +77,9 @@ export default function EngineeringRequestDetailPage({
   const loader = useCallback(() => getEngineeringRequest(requestId), [requestId]);
   const { data: request, error, isLoading, reload } = useApiResource(loader);
 
+  const planLoader = useCallback(() => getExecutionPlan(requestId), [requestId]);
+  const { data: executionPlan, reload: reloadPlan } = useApiResource(planLoader);
+
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -61,17 +91,19 @@ export default function EngineeringRequestDetailPage({
       try {
         await fn();
         await reload();
+        await reloadPlan().catch(() => undefined);
       } catch (caught) {
         setActionError(caught instanceof Error ? caught.message : "Action failed");
       } finally {
         setBusy(null);
       }
     },
-    [reload]
+    [reload, reloadPlan]
   );
 
   const canAnalyze = request ? ANALYZABLE.has(request.status) : false;
   const isPlanReady = request?.status === "plan_ready";
+  const isApproved = request?.status === "approved";
   const safety = request?.safety_notes ?? {};
 
   return (
@@ -232,6 +264,178 @@ export default function EngineeringRequestDetailPage({
               Human approval required: <strong>{safety.human_approval_required === false ? "no" : "yes"}</strong>
             </div>
           </section>
+
+          {/* Execution framework (Phase 9 Step 2) — planning metadata only */}
+          <section className="rounded-lg border border-line bg-panel p-4 shadow-surface">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Cpu className="h-4 w-4 text-brand" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-ink">Execution framework</h2>
+              </div>
+              <button
+                type="button"
+                disabled={(!isApproved && !executionPlan) || busy !== null}
+                onClick={() => run("execplan", () => generateExecutionPlan(request.id))}
+                className="focus-ring inline-flex items-center gap-2 rounded border border-line bg-panel px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-mist disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+                {busy === "execplan" ? "Generating" : executionPlan ? "Regenerate plan" : "Generate execution plan"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Planning metadata only. No code is written, committed, pushed, merged, or deployed.
+              {isApproved ? null : executionPlan ? null : " Approve the plan first to enable generation."}
+            </p>
+          </section>
+
+          {executionPlan ? (
+            (() => {
+              const ctx = executionPlan.repository_context as {
+                repository?: { full_name?: string; default_branch?: string; github_linked?: boolean } | null;
+                architecture_rules?: unknown[];
+                company_rules?: unknown[];
+                latest_scans?: unknown[];
+                latest_ai_review?: string | null;
+                workspace?: { branch_name?: string; state?: { issues?: string[]; clean?: boolean } };
+              };
+              const issues = ctx.workspace?.state?.issues ?? [];
+              return (
+                <>
+                  {/* Estimated impact */}
+                  <Section title="Estimated impact">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.08em] text-slate-500">Complexity</div>
+                        <div className="mt-1 text-lg font-semibold text-ink">{executionPlan.complexity}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.08em] text-slate-500">Est. duration</div>
+                        <div className="mt-1 text-lg font-semibold text-ink">{executionPlan.estimated_duration ?? "-"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.08em] text-slate-500">Files to modify</div>
+                        <div className="mt-1 text-lg font-semibold text-ink">{executionPlan.estimated_files.length}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.08em] text-slate-500">Safety</div>
+                        <div className="mt-1">
+                          <SafetyStatusBadge status={executionPlan.safety_status} />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-600">{executionPlan.dependency_analysis?.note}</p>
+                    {executionPlan.branch_name ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Proposed branch: <span className="font-mono text-slate-700">{executionPlan.branch_name}</span>
+                      </p>
+                    ) : null}
+                  </Section>
+
+                  {/* Execution plan */}
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    <Section title="Implementation tasks">
+                      {executionPlan.tasks.length === 0 ? (
+                        <p className="text-sm text-slate-500">No tasks.</p>
+                      ) : (
+                        <ol className="space-y-2 text-sm text-slate-700">
+                          {executionPlan.tasks.map((task) => (
+                            <li key={task.order} className="flex gap-2">
+                              <span className="font-mono text-slate-400">{task.order}.</span>
+                              <span>{task.title}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </Section>
+                    <Section title="Estimated files">
+                      {executionPlan.estimated_files.length === 0 ? (
+                        <p className="text-sm text-slate-500">No files estimated.</p>
+                      ) : (
+                        <ul className="space-y-1 font-mono text-sm text-slate-700">
+                          {executionPlan.estimated_files.map((path) => (
+                            <li key={path} className="flex items-center gap-2">
+                              <FileCode2 className="h-3.5 w-3.5 flex-none text-slate-400" aria-hidden="true" />
+                              {path}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </Section>
+                    <Section title="Rollback strategy">
+                      <BulletList items={executionPlan.rollback_strategy} empty="Not specified." />
+                    </Section>
+                    <Section title="Validation checklist">
+                      <BulletList items={executionPlan.validation_checklist} empty="Not specified." />
+                    </Section>
+                  </div>
+
+                  {/* Safety validation */}
+                  <section className="rounded-lg border border-line bg-panel shadow-surface">
+                    <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert className="h-4 w-4 text-signal" aria-hidden="true" />
+                        <h2 className="text-sm font-semibold text-ink">Safety validation</h2>
+                      </div>
+                      <SafetyStatusBadge status={executionPlan.safety_status} />
+                    </div>
+                    <div className="p-4">
+                      {executionPlan.safety_findings.length === 0 ? (
+                        <p className="text-sm text-emerald-700">No safety findings — change set looks safe.</p>
+                      ) : (
+                        <ul className="space-y-2 text-sm">
+                          {executionPlan.safety_findings.map((finding, index) => (
+                            <li
+                              key={index}
+                              className={clsx(
+                                "rounded border px-3 py-2",
+                                finding.level === "block"
+                                  ? "border-rose-200 bg-rose-50 text-rose-800"
+                                  : "border-amber-200 bg-amber-50 text-amber-800"
+                              )}
+                            >
+                              <span className="font-medium">{finding.category}:</span> {finding.message}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* Repository context */}
+                  <Section title="Repository context">
+                    <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                      <div>
+                        <dt className="text-slate-500">Repository</dt>
+                        <dd className="text-slate-800">{ctx.repository?.full_name ?? "-"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">Default branch</dt>
+                        <dd className="text-slate-800">{ctx.repository?.default_branch ?? "-"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">Company rules</dt>
+                        <dd className="text-slate-800">{ctx.company_rules?.length ?? 0}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">Architecture rules</dt>
+                        <dd className="text-slate-800">{ctx.architecture_rules?.length ?? 0}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-3 text-sm text-slate-600">
+                      Recent scans considered: {ctx.latest_scans?.length ?? 0}. Latest AI review:{" "}
+                      {ctx.latest_ai_review ? "available" : "none"}.
+                    </div>
+                    {issues.length > 0 ? (
+                      <div className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        <div className="font-medium">Repository state issues</div>
+                        <BulletList items={issues} empty="" />
+                      </div>
+                    ) : null}
+                  </Section>
+                </>
+              );
+            })()
+          ) : null}
         </div>
       ) : null}
     </AppShell>

@@ -225,3 +225,43 @@ export type CreateEngineeringRequestPayload = {
   priority: EngineeringRequestPriority;
   repository_id?: string | null;
 };
+
+export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
+
+export type ExecutionTask = {
+  order: number;
+  title: string;
+  detail?: string;
+};
+
+export type ExecutionSafetyFinding = {
+  level: string;
+  category: string;
+  message: string;
+  path?: string;
+};
+
+export type ExecutionPlan = {
+  id: string;
+  organization_id: string;
+  engineering_request_id: string;
+  repository_id: string | null;
+  tasks: ExecutionTask[];
+  estimated_files: string[];
+  dependency_analysis: {
+    touches_dependencies?: boolean;
+    dependency_files?: string[];
+    note?: string;
+    [key: string]: unknown;
+  };
+  complexity: string;
+  estimated_duration: string | null;
+  rollback_strategy: string[];
+  validation_checklist: string[];
+  repository_context: Record<string, unknown>;
+  safety_status: ExecutionSafetyStatus;
+  safety_findings: ExecutionSafetyFinding[];
+  branch_name: string | null;
+  created_at: string;
+  updated_at: string;
+};

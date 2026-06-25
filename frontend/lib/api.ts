@@ -9,6 +9,7 @@ import type {
   EngineeringRequestListItem,
   EngineeringRequestStatus,
   EngineeringRequestType,
+  ExecutionPlan,
   HealthStatus,
   QueueMetrics,
   Repository,
@@ -246,4 +247,21 @@ export function rejectEngineeringRequestPlan(
     method: "POST",
     body: JSON.stringify({ reason: reason ?? null })
   });
+}
+
+export function generateExecutionPlan(requestId: string): Promise<ExecutionPlan> {
+  return apiFetch<ExecutionPlan>(`/engineering-requests/${requestId}/execution-plan`, {
+    method: "POST"
+  });
+}
+
+export async function getExecutionPlan(requestId: string): Promise<ExecutionPlan | null> {
+  try {
+    return await apiFetch<ExecutionPlan>(`/engineering-requests/${requestId}/execution-plan`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }

@@ -8,13 +8,16 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.engineering_request import EngineeringRequest, RequestStatus, RequestType
 from app.models.user import User
+from app.models.execution_plan import ExecutionPlan
 from app.schemas.engineering_request import (
     EngineeringRequestCreate,
     EngineeringRequestDetail,
     EngineeringRequestListItem,
     RejectPlanRequest,
 )
+from app.schemas.execution_plan import ExecutionPlanRead
 from app.services.engineering_request_service import EngineeringRequestService
+from app.services.execution.execution_plan_service import ExecutionPlanService
 
 router = APIRouter(prefix="/engineering-requests", tags=["engineering-requests"])
 
@@ -98,3 +101,29 @@ def reject_engineering_request_plan(
         actor_user_id=current_user.id,
         reason=payload.reason if payload else None,
     )
+
+
+@router.post("/{request_id}/execution-plan", response_model=ExecutionPlanRead)
+def generate_execution_plan(
+    request_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ExecutionPlan:
+    """Generate planning-only execution metadata for an approved request.
+
+    Produces no source code and performs no GitHub action.
+    """
+    return ExecutionPlanService(db).generate(
+        engineering_request_id=request_id,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@router.get("/{request_id}/execution-plan", response_model=ExecutionPlanRead)
+def get_execution_plan(
+    request_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ExecutionPlan:
+    return ExecutionPlanService(db).get_for_request(request_id, current_user.organization_id)

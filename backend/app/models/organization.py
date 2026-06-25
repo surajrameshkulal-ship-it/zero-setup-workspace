@@ -29,6 +29,11 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="organization",
         cascade="all, delete-orphan",
     )
+    execution_plans = relationship(
+        "ExecutionPlan",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+    )
     audit_logs = relationship("AuditLog", back_populates="organization", cascade="all, delete-orphan")
     settings = relationship("AdminSetting", back_populates="organization", cascade="all, delete-orphan")
 
