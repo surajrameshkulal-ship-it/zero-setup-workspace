@@ -1,6 +1,7 @@
 from __future__ import annotations
 from app.models.audit import AuditLog
 from app.models.base import Base
+from app.models.code_generation import CodeGenerationPreview
 from app.models.engineering_request import (
     EngineeringRequest,
     RequestPriority,
@@ -26,6 +27,7 @@ __all__ = [
     "ArchitectureRule",
     "AuditLog",
     "Base",
+    "CodeGenerationPreview",
     "CompanyRule",
     "CompanyRuleType",
     "EngineeringRequest",

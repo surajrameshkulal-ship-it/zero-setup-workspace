@@ -8,7 +8,9 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.engineering_request import EngineeringRequest, RequestStatus, RequestType
 from app.models.user import User
+from app.models.code_generation import CodeGenerationPreview
 from app.models.execution_plan import ExecutionPlan
+from app.schemas.code_generation import CodeGenerationPreviewRead
 from app.schemas.engineering_request import (
     EngineeringRequestCreate,
     EngineeringRequestDetail,
@@ -16,6 +18,7 @@ from app.schemas.engineering_request import (
     RejectPlanRequest,
 )
 from app.schemas.execution_plan import ExecutionPlanRead
+from app.services.agent.code_generation_service import CodeGenerationService
 from app.services.engineering_request_service import EngineeringRequestService
 from app.services.execution.execution_plan_service import ExecutionPlanService
 
@@ -127,3 +130,26 @@ def get_execution_plan(
     db: Session = Depends(get_db),
 ) -> ExecutionPlan:
     return ExecutionPlanService(db).get_for_request(request_id, current_user.organization_id)
+
+
+@router.post("/{request_id}/code-generation", response_model=CodeGenerationPreviewRead)
+def generate_code_preview(
+    request_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CodeGenerationPreview:
+    """Produce an implementation PREVIEW only. No files, commits, branches, PRs, or deploys."""
+    return CodeGenerationService(db).generate(
+        engineering_request_id=request_id,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@router.get("/{request_id}/code-generation", response_model=CodeGenerationPreviewRead)
+def get_code_preview(
+    request_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CodeGenerationPreview:
+    return CodeGenerationService(db).get_for_request(request_id, current_user.organization_id)

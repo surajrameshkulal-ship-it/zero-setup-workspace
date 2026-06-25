@@ -19,7 +19,9 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/data-state";
 import {
   analyzeEngineeringRequest,
   approveEngineeringRequestPlan,
+  generateCodePreview,
   generateExecutionPlan,
+  getCodePreview,
   getEngineeringRequest,
   getExecutionPlan,
   rejectEngineeringRequestPlan
@@ -80,6 +82,9 @@ export default function EngineeringRequestDetailPage({
   const planLoader = useCallback(() => getExecutionPlan(requestId), [requestId]);
   const { data: executionPlan, reload: reloadPlan } = useApiResource(planLoader);
 
+  const codeLoader = useCallback(() => getCodePreview(requestId), [requestId]);
+  const { data: codePreview, reload: reloadCode } = useApiResource(codeLoader);
+
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -92,13 +97,14 @@ export default function EngineeringRequestDetailPage({
         await fn();
         await reload();
         await reloadPlan().catch(() => undefined);
+        await reloadCode().catch(() => undefined);
       } catch (caught) {
         setActionError(caught instanceof Error ? caught.message : "Action failed");
       } finally {
         setBusy(null);
       }
     },
-    [reload, reloadPlan]
+    [reload, reloadPlan, reloadCode]
   );
 
   const canAnalyze = request ? ANALYZABLE.has(request.status) : false;
@@ -435,6 +441,88 @@ export default function EngineeringRequestDetailPage({
                 </>
               );
             })()
+          ) : null}
+
+          {/* Code generation preview (Phase 9 Step 4) — preview only */}
+          <section className="rounded-lg border border-line bg-panel p-4 shadow-surface">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FileCode2 className="h-4 w-4 text-brand" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-ink">Code generation preview</h2>
+              </div>
+              <button
+                type="button"
+                disabled={(!isApproved && !codePreview) || busy !== null}
+                onClick={() => run("codegen", () => generateCodePreview(request.id))}
+                className="focus-ring inline-flex items-center gap-2 rounded border border-line bg-panel px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-mist disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+                {busy === "codegen" ? "Generating" : codePreview ? "Regenerate preview" : "Generate preview"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Preview only. No files are written, committed, pushed, branched, or turned into a PR.
+              {isApproved || codePreview ? null : " Approve the plan first to enable preview."}
+            </p>
+          </section>
+
+          {codePreview ? (
+            <>
+              <Section title="Proposed changes">
+                {codePreview.summary ? <p className="text-sm text-slate-700">{codePreview.summary}</p> : null}
+                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                  <div>
+                    <dt className="text-slate-500">Files</dt>
+                    <dd className="text-lg font-semibold text-ink">{codePreview.estimated_changes?.files ?? 0}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">Est. additions</dt>
+                    <dd className="text-lg font-semibold text-emerald-700">
+                      +{codePreview.estimated_changes?.estimated_additions ?? 0}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">Est. deletions</dt>
+                    <dd className="text-lg font-semibold text-rose-700">
+                      -{codePreview.estimated_changes?.estimated_deletions ?? 0}
+                    </dd>
+                  </div>
+                </dl>
+                {codePreview.affected_files.length > 0 ? (
+                  <ul className="mt-3 space-y-1 text-sm">
+                    {codePreview.affected_files.map((file, index) => (
+                      <li key={index} className="flex items-center gap-2 font-mono text-slate-700">
+                        <span className="inline-flex rounded border border-line bg-mist px-1.5 text-xs text-slate-600">
+                          {file.change_type}
+                        </span>
+                        {file.path}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <p className="mt-2 text-xs text-slate-400">
+                  {codePreview.ai_available ? "Generated with AI." : "AI unavailable — illustrative fallback."}
+                </p>
+              </Section>
+
+              <Section title="Diff preview (illustrative — not applied)">
+                <pre className="overflow-x-auto rounded border border-line bg-mist p-3 text-xs leading-5 text-slate-800">
+                  {codePreview.diff_preview ?? "No diff preview."}
+                </pre>
+              </Section>
+
+              <div className="grid gap-6 xl:grid-cols-3">
+                <Section title="Implementation tasks">
+                  <BulletList items={codePreview.implementation_tasks} empty="None." />
+                </Section>
+                <Section title="Tests to create">
+                  <BulletList items={codePreview.tests_to_create} empty="None." />
+                </Section>
+                <Section title="Documentation updates">
+                  <BulletList items={codePreview.documentation_updates} empty="None." />
+                </Section>
+              </div>
+            </>
           ) : null}
         </div>
       ) : null}

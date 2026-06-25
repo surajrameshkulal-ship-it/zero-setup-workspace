@@ -250,6 +250,35 @@ export type RepositoryDNA = {
   updated_at: string;
 };
 
+export type CodeAffectedFile = {
+  path: string;
+  change_type: "modify" | "create" | "delete" | string;
+  reason?: string;
+};
+
+export type CodeGenerationPreview = {
+  id: string;
+  organization_id: string;
+  engineering_request_id: string;
+  repository_id: string | null;
+  summary: string | null;
+  affected_files: CodeAffectedFile[];
+  diff_preview: string | null;
+  implementation_tasks: string[];
+  estimated_changes: {
+    files?: number;
+    estimated_additions?: number;
+    estimated_deletions?: number;
+    note?: string;
+    [key: string]: unknown;
+  };
+  documentation_updates: string[];
+  tests_to_create: string[];
+  ai_available: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {

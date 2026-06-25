@@ -1,6 +1,7 @@
 import type {
   ArchitectureRule,
   AuthResponse,
+  CodeGenerationPreview,
   CompanyRule,
   CreateEngineeringRequestPayload,
   DashboardResponse,
@@ -274,6 +275,23 @@ export function generateExecutionPlan(requestId: string): Promise<ExecutionPlan>
 export async function getExecutionPlan(requestId: string): Promise<ExecutionPlan | null> {
   try {
     return await apiFetch<ExecutionPlan>(`/engineering-requests/${requestId}/execution-plan`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function generateCodePreview(requestId: string): Promise<CodeGenerationPreview> {
+  return apiFetch<CodeGenerationPreview>(`/engineering-requests/${requestId}/code-generation`, {
+    method: "POST"
+  });
+}
+
+export async function getCodePreview(requestId: string): Promise<CodeGenerationPreview | null> {
+  try {
+    return await apiFetch<CodeGenerationPreview>(`/engineering-requests/${requestId}/code-generation`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;
