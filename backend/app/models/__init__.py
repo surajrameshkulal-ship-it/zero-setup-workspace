@@ -22,6 +22,7 @@ from app.models.rule import ArchitectureRule, CompanyRule, CompanyRuleType, Seve
 from app.models.scan import PullRequestScan, RiskLevel, ScanStatus
 from app.models.setting import AdminSetting
 from app.models.user import User, UserRole
+from app.models.validation_run import ValidationRun
 
 __all__ = [
     "AdminSetting",
@@ -49,5 +50,6 @@ __all__ = [
     "Severity",
     "User",
     "UserRole",
+    "ValidationRun",
 ]
 

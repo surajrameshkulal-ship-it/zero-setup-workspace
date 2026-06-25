@@ -26,8 +26,10 @@ import {
   getDraftPullRequest,
   getEngineeringRequest,
   getExecutionPlan,
+  getValidation,
   prepareDraftPullRequest,
-  rejectEngineeringRequestPlan
+  rejectEngineeringRequestPlan,
+  runValidation
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { useApiResource } from "@/hooks/use-api-resource";
@@ -91,6 +93,9 @@ export default function EngineeringRequestDetailPage({
   const draftLoader = useCallback(() => getDraftPullRequest(requestId), [requestId]);
   const { data: draftPr, reload: reloadDraft } = useApiResource(draftLoader);
 
+  const validationLoader = useCallback(() => getValidation(requestId), [requestId]);
+  const { data: validation, reload: reloadValidation } = useApiResource(validationLoader);
+
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -105,13 +110,14 @@ export default function EngineeringRequestDetailPage({
         await reloadPlan().catch(() => undefined);
         await reloadCode().catch(() => undefined);
         await reloadDraft().catch(() => undefined);
+        await reloadValidation().catch(() => undefined);
       } catch (caught) {
         setActionError(caught instanceof Error ? caught.message : "Action failed");
       } finally {
         setBusy(null);
       }
     },
-    [reload, reloadPlan, reloadCode, reloadDraft]
+    [reload, reloadPlan, reloadCode, reloadDraft, reloadValidation]
   );
 
   const canAnalyze = request ? ANALYZABLE.has(request.status) : false;
@@ -530,6 +536,76 @@ export default function EngineeringRequestDetailPage({
                 </Section>
               </div>
             </>
+          ) : null}
+
+          {/* Autonomous validation (Phase 9 Step 6) — on success prepares a draft PR */}
+          <section className="rounded-lg border border-line bg-panel p-4 shadow-surface">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-brand" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-ink">Autonomous validation</h2>
+              </div>
+              <button
+                type="button"
+                disabled={(!isApproved && !validation) || busy !== null}
+                onClick={() => run("validate", () => runValidation(request.id))}
+                className="focus-ring inline-flex items-center gap-2 rounded border border-line bg-panel px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-mist disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+                {busy === "validate" ? "Running" : validation ? "Re-run validation" : "Run validation"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Runs tests, build, Semgrep, CodeDNA review, and rule checks (with auto-fix retries). On success it
+              prepares a draft PR. Never merges or deploys.
+              {isApproved || validation ? null : " Approve the plan first to enable."}
+            </p>
+          </section>
+
+          {validation ? (
+            <Section title="Validation report">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={clsx(
+                    "inline-flex rounded border px-2 py-0.5 text-xs font-medium",
+                    validation.status === "passed"
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                      : "border-rose-300 bg-rose-50 text-rose-800"
+                  )}
+                >
+                  {validation.status}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {validation.attempts} / {validation.max_attempts} attempt(s)
+                </span>
+                {validation.auto_fixes_applied.length > 0 ? (
+                  <span className="text-xs text-slate-500">{validation.auto_fixes_applied.length} auto-fix(es)</span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm text-slate-600">{validation.report?.summary}</p>
+              <ul className="mt-3 space-y-1.5 text-sm">
+                {validation.checks.map((check, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    {check.status === "passed" ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" aria-hidden="true" />
+                    ) : check.status === "failed" ? (
+                      <Ban className="mt-0.5 h-4 w-4 flex-none text-rose-600" aria-hidden="true" />
+                    ) : (
+                      <span className="mt-0.5 h-4 w-4 flex-none text-slate-400">–</span>
+                    )}
+                    <span className="font-mono text-xs text-slate-700">{check.name}</span>
+                    {check.details ? <span className="text-xs text-slate-500">— {check.details}</span> : null}
+                  </li>
+                ))}
+              </ul>
+              {validation.draft_pull_request_id ? (
+                <p className="mt-3 text-xs text-emerald-700">
+                  ✓ A draft pull request was prepared (see below). Nothing was pushed, merged, or deployed.
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-slate-500">No draft pull request was created.</p>
+              )}
+            </Section>
           ) : null}
 
           {/* Draft pull request (Phase 9 Step 5) — metadata only, human-gated */}

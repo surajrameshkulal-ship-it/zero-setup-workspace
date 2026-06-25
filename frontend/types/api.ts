@@ -303,6 +303,36 @@ export type DraftPullRequest = {
   updated_at: string;
 };
 
+export type ValidationCheck = {
+  name: string;
+  status: "passed" | "failed" | "skipped" | string;
+  details?: string;
+  attempt?: number;
+};
+
+export type ValidationRun = {
+  id: string;
+  organization_id: string;
+  engineering_request_id: string;
+  repository_id: string | null;
+  draft_pull_request_id: string | null;
+  status: "passed" | "failed" | string;
+  attempts: number;
+  max_attempts: number;
+  checks: ValidationCheck[];
+  auto_fixes_applied: Array<Record<string, unknown>>;
+  report: {
+    success?: boolean;
+    passed?: string[];
+    failed?: string[];
+    summary?: string;
+    draft_pull_request_created?: boolean;
+    [key: string]: unknown;
+  };
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {

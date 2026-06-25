@@ -20,7 +20,8 @@ import type {
   ScanDetail,
   ScanListItem,
   ScanStatus,
-  User
+  User,
+  ValidationRun
 } from "@/types/api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -308,6 +309,21 @@ export function prepareDraftPullRequest(requestId: string): Promise<DraftPullReq
 export async function getDraftPullRequest(requestId: string): Promise<DraftPullRequest | null> {
   try {
     return await apiFetch<DraftPullRequest>(`/engineering-requests/${requestId}/draft-pr`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function runValidation(requestId: string): Promise<ValidationRun> {
+  return apiFetch<ValidationRun>(`/engineering-requests/${requestId}/validate`, { method: "POST" });
+}
+
+export async function getValidation(requestId: string): Promise<ValidationRun | null> {
+  try {
+    return await apiFetch<ValidationRun>(`/engineering-requests/${requestId}/validation`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;

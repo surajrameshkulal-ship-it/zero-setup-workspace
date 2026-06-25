@@ -11,8 +11,10 @@ from app.models.user import User
 from app.models.code_generation import CodeGenerationPreview
 from app.models.draft_pull_request import DraftPullRequest
 from app.models.execution_plan import ExecutionPlan
+from app.models.validation_run import ValidationRun
 from app.schemas.code_generation import CodeGenerationPreviewRead
 from app.schemas.draft_pull_request import DraftPullRequestRead
+from app.schemas.validation_run import ValidationRunRead
 from app.schemas.engineering_request import (
     EngineeringRequestCreate,
     EngineeringRequestDetail,
@@ -22,6 +24,7 @@ from app.schemas.engineering_request import (
 from app.schemas.execution_plan import ExecutionPlanRead
 from app.services.agent.code_generation_service import CodeGenerationService
 from app.services.agent.draft_pr_service import DraftPullRequestService
+from app.services.agent.validation_service import ValidationService
 from app.services.engineering_request_service import EngineeringRequestService
 from app.services.execution.execution_plan_service import ExecutionPlanService
 
@@ -179,3 +182,29 @@ def get_draft_pull_request(
     db: Session = Depends(get_db),
 ) -> DraftPullRequest:
     return DraftPullRequestService(db).get_for_request(request_id, current_user.organization_id)
+
+
+@router.post("/{request_id}/validate", response_model=ValidationRunRead)
+def run_validation(
+    request_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ValidationRun:
+    """Run the autonomous validation pipeline. On success it prepares a DRAFT PR.
+
+    Never merges or deploys; all GitHub output remains a human-gated draft.
+    """
+    return ValidationService(db).run(
+        engineering_request_id=request_id,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@router.get("/{request_id}/validation", response_model=ValidationRunRead)
+def get_validation(
+    request_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ValidationRun:
+    return ValidationService(db).get_for_request(request_id, current_user.organization_id)
