@@ -32,25 +32,38 @@ class CheckRunReportBuilder:
 
     def build_completed_output(self, report: dict[str, Any]) -> dict[str, str]:
         risk = report.get("risk") or {}
-        top_violations = self.top_violations(report)
-        summary_lines = [
-            f"Risk score: **{risk.get('score', 0)}/100**",
-            f"Risk level: **{str(risk.get('level', 'unknown')).upper()}**",
-            f"Findings count: **{self.findings_count(report)}**",
+        level = str(risk.get("level", "unknown"))
+        score = risk.get("score", 0)
+        total_findings = self.findings_count(report)
+
+        summary_lines: list[str] = [
+            "## Summary",
+            self._verdict_line(report, total_findings),
             "",
-            "### Top Violations",
+            "### Risk",
+            f"{self._risk_emoji(level)} Risk score: **{score}/100**",
+            f"Risk level: **{level.upper()}**",
+            f"Findings count: **{total_findings}**",
+            "",
+            "### Findings",
         ]
-        if top_violations:
-            for finding in top_violations:
-                location = finding.get("path") or "repository"
-                if finding.get("line"):
-                    location = f"{location}:{finding['line']}"
-                summary_lines.append(
-                    f"- **{str(finding.get('severity', 'medium')).upper()}** `{location}`: "
-                    f"{finding.get('title', 'Finding')}"
-                )
-        else:
-            summary_lines.append("- No company or architecture rule violations detected.")
+        summary_lines.extend(self._findings_breakdown_lines(report))
+
+        summary_lines.extend(["", "### Company Rules"])
+        summary_lines.extend(
+            self._violation_lines(
+                report.get("company_rule_violations") or [],
+                "No company rule violations detected.",
+            )
+        )
+
+        summary_lines.extend(["", "### Architecture Notes"])
+        summary_lines.extend(
+            self._violation_lines(
+                report.get("architecture_violations") or [],
+                "No architecture violations detected.",
+            )
+        )
 
         summary_lines.extend(self.ai_review_lines(report))
 
@@ -58,6 +71,57 @@ class CheckRunReportBuilder:
             "title": CHECK_RUN_OUTPUT_TITLE,
             "summary": "\n".join(summary_lines),
         }
+
+    def _verdict_line(self, report: dict[str, Any], total_findings: int) -> str:
+        conclusion = self.conclusion_for_report(report)
+        if conclusion == "failure":
+            return (
+                "🔴 **Changes requested** — company or architecture rules were "
+                "violated. Resolve these before merging."
+            )
+        if conclusion == "neutral":
+            return "⚪ **No issues detected** — no findings, and AI review was not run."
+        if total_findings > 0:
+            return (
+                f"🟡 **Reviewed** — {total_findings} finding(s) to consider; "
+                "no blocking rule violations."
+            )
+        return "✅ **Looks good** — no findings and no rule violations."
+
+    def _risk_emoji(self, level: str) -> str:
+        return {
+            "low": "🟢",
+            "medium": "🟡",
+            "high": "🟠",
+            "critical": "🔴",
+        }.get(level.lower(), "⚪")
+
+    def _findings_breakdown_lines(self, report: dict[str, Any]) -> list[str]:
+        counts = [
+            ("Semgrep", len(report.get("semgrep_findings") or [])),
+            ("AI", len(report.get("ai_findings") or [])),
+            ("Company rules", len(report.get("company_rule_violations") or [])),
+            ("Architecture", len(report.get("architecture_violations") or [])),
+        ]
+        if sum(count for _, count in counts) == 0:
+            return ["✅ No findings detected."]
+        return [f"- {name}: **{count}**" for name, count in counts]
+
+    def _violation_lines(self, violations: list[dict[str, Any]], empty_message: str) -> list[str]:
+        if not violations:
+            return [f"✅ {empty_message}"]
+        lines: list[str] = []
+        for finding in violations[:5]:
+            location = finding.get("path") or "repository"
+            if finding.get("line"):
+                location = f"{location}:{finding['line']}"
+            severity = str(finding.get("severity", "medium")).upper()
+            title = finding.get("title", "Finding")
+            lines.append(f"- ⚠️ **{severity}** — {title} (`{location}`)")
+        remaining = len(violations) - 5
+        if remaining > 0:
+            lines.append(f"- …and {remaining} more.")
+        return lines
 
     def build_failed_output(self, *, failure_reason: str) -> dict[str, str]:
         return {
