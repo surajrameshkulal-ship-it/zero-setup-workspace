@@ -17,18 +17,24 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+# create_type=False on every column-referenced ENUM: the types are created
+# explicitly in upgrade() with checkfirst=True, so op.create_table must NOT try
+# to create them again (that double-create is the DuplicateObject bug).
 REQUEST_TYPE = postgresql.ENUM(
     "bug", "feature", "refactor", "docs", "security", "performance", "other",
     name="engineering_request_type",
+    create_type=False,
 )
 REQUEST_STATUS = postgresql.ENUM(
     "submitted", "analyzing", "plan_ready", "approved", "rejected",
     "in_progress", "pr_opened", "completed", "failed",
     name="engineering_request_status",
+    create_type=False,
 )
 REQUEST_PRIORITY = postgresql.ENUM(
     "low", "medium", "high", "urgent",
     name="engineering_request_priority",
+    create_type=False,
 )
 # risk_level already exists (created by the initial migration); reuse without re-creating.
 RISK_LEVEL = postgresql.ENUM(
@@ -40,6 +46,7 @@ RISK_LEVEL = postgresql.ENUM(
 
 def upgrade() -> None:
     bind = op.get_bind()
+    # Idempotent, explicit type creation (checkfirst avoids DuplicateObject on re-run).
     REQUEST_TYPE.create(bind, checkfirst=True)
     REQUEST_STATUS.create(bind, checkfirst=True)
     REQUEST_PRIORITY.create(bind, checkfirst=True)
