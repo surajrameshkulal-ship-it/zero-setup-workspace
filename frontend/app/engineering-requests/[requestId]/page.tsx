@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Cpu,
   FileCode2,
+  GitPullRequest,
   Play,
   ShieldAlert,
   ShieldCheck
@@ -22,8 +23,10 @@ import {
   generateCodePreview,
   generateExecutionPlan,
   getCodePreview,
+  getDraftPullRequest,
   getEngineeringRequest,
   getExecutionPlan,
+  prepareDraftPullRequest,
   rejectEngineeringRequestPlan
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
@@ -85,6 +88,9 @@ export default function EngineeringRequestDetailPage({
   const codeLoader = useCallback(() => getCodePreview(requestId), [requestId]);
   const { data: codePreview, reload: reloadCode } = useApiResource(codeLoader);
 
+  const draftLoader = useCallback(() => getDraftPullRequest(requestId), [requestId]);
+  const { data: draftPr, reload: reloadDraft } = useApiResource(draftLoader);
+
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -98,13 +104,14 @@ export default function EngineeringRequestDetailPage({
         await reload();
         await reloadPlan().catch(() => undefined);
         await reloadCode().catch(() => undefined);
+        await reloadDraft().catch(() => undefined);
       } catch (caught) {
         setActionError(caught instanceof Error ? caught.message : "Action failed");
       } finally {
         setBusy(null);
       }
     },
-    [reload, reloadPlan, reloadCode]
+    [reload, reloadPlan, reloadCode, reloadDraft]
   );
 
   const canAnalyze = request ? ANALYZABLE.has(request.status) : false;
@@ -520,6 +527,83 @@ export default function EngineeringRequestDetailPage({
                 </Section>
                 <Section title="Documentation updates">
                   <BulletList items={codePreview.documentation_updates} empty="None." />
+                </Section>
+              </div>
+            </>
+          ) : null}
+
+          {/* Draft pull request (Phase 9 Step 5) — metadata only, human-gated */}
+          <section className="rounded-lg border border-line bg-panel p-4 shadow-surface">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <GitPullRequest className="h-4 w-4 text-brand" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-ink">Draft pull request</h2>
+              </div>
+              <button
+                type="button"
+                disabled={(!isApproved && !draftPr) || busy !== null}
+                onClick={() => run("draftpr", () => prepareDraftPullRequest(request.id))}
+                className="focus-ring inline-flex items-center gap-2 rounded border border-line bg-panel px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-mist disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+                {busy === "draftpr" ? "Preparing" : draftPr ? "Regenerate draft" : "Prepare draft PR"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Metadata only. No branch is pushed, no PR is opened, nothing is merged or deployed.
+              {isApproved || draftPr ? null : " Approve the plan first to enable."}
+            </p>
+          </section>
+
+          {draftPr ? (
+            <>
+              <Section title="Draft PR metadata">
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="text-slate-500">Title:</span>{" "}
+                    <span className="font-medium text-ink">{draftPr.title}</span>
+                  </div>
+                  <div className="font-mono text-xs text-slate-700">
+                    <span className="rounded border border-line bg-mist px-1.5 py-0.5">{draftPr.branch_name}</span>
+                    {" → "}
+                    <span className="rounded border border-line bg-mist px-1.5 py-0.5">{draftPr.base_branch}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {draftPr.labels.map((label) => (
+                      <span key={label} className="inline-flex rounded border border-line bg-mist px-2 py-0.5 text-xs text-slate-700">
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                    <span>Pushed: <strong>{draftPr.is_pushed ? "yes" : "no"}</strong></span>
+                    <span>Human approval required: <strong>{draftPr.human_approval_required ? "yes" : "no"}</strong></span>
+                    <span>Status: <strong>{draftPr.status}</strong></span>
+                  </div>
+                </div>
+              </Section>
+
+              <div className="grid gap-6 xl:grid-cols-2">
+                <Section title="Commit plan">
+                  {draftPr.commit_plan.length === 0 ? (
+                    <p className="text-sm text-slate-500">No commits planned.</p>
+                  ) : (
+                    <ul className="space-y-2 text-sm">
+                      {draftPr.commit_plan.map((commit) => (
+                        <li key={commit.order}>
+                          <div className="font-mono text-slate-800">{commit.message}</div>
+                          {commit.files.length > 0 ? (
+                            <div className="mt-1 text-xs text-slate-500">{commit.files.join(", ")}</div>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Section>
+                <Section title="PR description">
+                  <pre className="overflow-x-auto whitespace-pre-wrap rounded border border-line bg-mist p-3 text-xs leading-5 text-slate-800">
+                    {draftPr.body ?? "No description."}
+                  </pre>
                 </Section>
               </div>
             </>

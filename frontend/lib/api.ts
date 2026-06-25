@@ -6,6 +6,7 @@ import type {
   CreateEngineeringRequestPayload,
   DashboardResponse,
   DeadLetterScan,
+  DraftPullRequest,
   EngineeringRequestDetail,
   EngineeringRequestListItem,
   EngineeringRequestStatus,
@@ -292,6 +293,21 @@ export function generateCodePreview(requestId: string): Promise<CodeGenerationPr
 export async function getCodePreview(requestId: string): Promise<CodeGenerationPreview | null> {
   try {
     return await apiFetch<CodeGenerationPreview>(`/engineering-requests/${requestId}/code-generation`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function prepareDraftPullRequest(requestId: string): Promise<DraftPullRequest> {
+  return apiFetch<DraftPullRequest>(`/engineering-requests/${requestId}/draft-pr`, { method: "POST" });
+}
+
+export async function getDraftPullRequest(requestId: string): Promise<DraftPullRequest | null> {
+  try {
+    return await apiFetch<DraftPullRequest>(`/engineering-requests/${requestId}/draft-pr`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;

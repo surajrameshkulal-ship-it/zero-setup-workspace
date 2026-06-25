@@ -44,6 +44,11 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="organization",
         cascade="all, delete-orphan",
     )
+    draft_pull_requests = relationship(
+        "DraftPullRequest",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+    )
     audit_logs = relationship("AuditLog", back_populates="organization", cascade="all, delete-orphan")
     settings = relationship("AdminSetting", back_populates="organization", cascade="all, delete-orphan")
 

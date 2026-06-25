@@ -2,6 +2,7 @@ from __future__ import annotations
 from app.models.audit import AuditLog
 from app.models.base import Base
 from app.models.code_generation import CodeGenerationPreview
+from app.models.draft_pull_request import DraftPullRequest
 from app.models.engineering_request import (
     EngineeringRequest,
     RequestPriority,
@@ -30,6 +31,7 @@ __all__ = [
     "CodeGenerationPreview",
     "CompanyRule",
     "CompanyRuleType",
+    "DraftPullRequest",
     "EngineeringRequest",
     "ExecutionComplexity",
     "ExecutionPlan",

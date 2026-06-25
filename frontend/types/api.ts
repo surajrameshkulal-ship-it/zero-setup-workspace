@@ -279,6 +279,30 @@ export type CodeGenerationPreview = {
   updated_at: string;
 };
 
+export type DraftCommit = {
+  order: number;
+  message: string;
+  files: string[];
+};
+
+export type DraftPullRequest = {
+  id: string;
+  organization_id: string;
+  engineering_request_id: string;
+  repository_id: string | null;
+  branch_name: string;
+  base_branch: string | null;
+  title: string;
+  body: string | null;
+  commit_plan: DraftCommit[];
+  labels: string[];
+  status: string;
+  is_pushed: boolean;
+  human_approval_required: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {
