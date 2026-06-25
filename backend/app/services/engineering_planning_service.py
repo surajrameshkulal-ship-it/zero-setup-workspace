@@ -8,8 +8,6 @@ from app.core.config import settings
 from app.models.engineering_request import EngineeringRequest, RequestType
 from app.models.repository import Repository
 from app.models.scan import PullRequestScan, RiskLevel
-from app.services.ai_review.groq_client import GroqClient
-from app.services.ai_review.ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +57,15 @@ class EngineeringPlanningService:
     The plan is advisory only. Nothing here merges, pushes, or deploys.
     """
 
-    def __init__(self, *, client: GroqClient | OllamaClient | None = None) -> None:
+    def __init__(self, *, client: object | None = None) -> None:
         provider = settings.ai_provider.lower()
+        # Route through the AI Provider Router (never auto-falls back to Ollama).
         if client is not None:
             self.client = client
-        elif provider == "groq":
-            self.client = GroqClient()
         else:
-            self.client = OllamaClient()
+            from app.services.ai.provider_router import AIProviderRouter
+
+            self.client = AIProviderRouter().select()
         self.provider = provider
 
     # -- public API ------------------------------------------------------------

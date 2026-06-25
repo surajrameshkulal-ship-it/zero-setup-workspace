@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from app.core.config import settings
+from app.services.ai.provider_router import AIProviderRouter
 from app.services.ai_review.limits import AIReviewLimitService
 from app.services.ai_review.ollama_client import OllamaClient
 from app.services.ai_review.pr_context_builder import PRContextBuilder
@@ -35,12 +36,12 @@ class AIReviewService:
     ) -> None:
         provider = settings.ai_provider.lower()
 
+        # All AI features route through the AI Provider Router. Ollama is never
+        # selected automatically; an explicitly injected client still wins (tests).
         if client is not None:
             self.client = client
-        elif provider == "groq":
-            self.client = GroqClient()
         else:
-            self.client = OllamaClient()
+            self.client = AIProviderRouter().select()
 
         self.provider = provider
         self.context_builder = context_builder or PRContextBuilder()

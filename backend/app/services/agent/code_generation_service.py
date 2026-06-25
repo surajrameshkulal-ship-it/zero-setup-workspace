@@ -12,8 +12,6 @@ from app.core.config import settings
 from app.core.errors import AppError, NotFoundError
 from app.models.code_generation import CodeGenerationPreview
 from app.models.engineering_request import EngineeringRequest, RequestStatus
-from app.services.ai_review.groq_client import GroqClient
-from app.services.ai_review.ollama_client import OllamaClient
 from app.services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
@@ -28,16 +26,16 @@ class CodeGenerationService:
     deploys. The diff is illustrative and is never applied.
     """
 
-    def __init__(self, db: Session, *, client: GroqClient | OllamaClient | None = None) -> None:
+    def __init__(self, db: Session, *, client: object | None = None) -> None:
         self.db = db
         self.audit = AuditService(db)
-        provider = settings.ai_provider.lower()
+        # Route through the AI Provider Router (never auto-falls back to Ollama).
         if client is not None:
             self.client = client
-        elif provider == "groq":
-            self.client = GroqClient()
         else:
-            self.client = OllamaClient()
+            from app.services.ai.provider_router import AIProviderRouter
+
+            self.client = AIProviderRouter().select()
 
     # -- queries ---------------------------------------------------------------
 

@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     ai_max_diff_chars: int = 80000
     groq_api_key: str | None = None
     groq_model: str = "llama-3.1-8b-instant"
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-3-5-sonnet-latest"
     ollama_base_url: AnyHttpUrl = "http://host.docker.internal:11434"
     ollama_model: str = "llama3.1:8b"
     ollama_timeout_seconds: int = 120
