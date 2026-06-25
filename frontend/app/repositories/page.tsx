@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useCallback } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { GitBranch, RefreshCw, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { EmptyState, ErrorState, LoadingState } from "@/components/data-state";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/data-state";
 import { listRepositories } from "@/lib/api";
+import { formatDate } from "@/lib/format";
 import { useApiResource } from "@/hooks/use-api-resource";
 
 export default function RepositoriesPage() {
@@ -26,8 +27,8 @@ export default function RepositoriesPage() {
         </button>
       }
     >
-      {isLoading ? <LoadingState label="Loading repositories" /> : null}
-      {error ? <ErrorState message={error} /> : null}
+      {isLoading ? <TableSkeleton rows={5} columns={6} /> : null}
+      {error ? <ErrorState message={error} onRetry={() => reload().catch(() => undefined)} /> : null}
       {data ? (
         <section className="rounded-lg border border-line bg-panel shadow-surface">
           <div className="flex items-center gap-2 border-b border-line px-4 py-3">
@@ -35,7 +36,11 @@ export default function RepositoriesPage() {
             <h2 className="text-sm font-semibold text-ink">Connected repositories</h2>
           </div>
           {data.length === 0 ? (
-            <EmptyState title="No repositories connected" />
+            <EmptyState
+              icon={GitBranch}
+              title="No repositories connected"
+              description="Install the CodeDNA GitHub App and register a repository to start scanning pull requests. For a demo, run the seed data script."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-line text-sm">
@@ -60,7 +65,7 @@ export default function RepositoriesPage() {
                           {repository.is_active ? "active" : "inactive"}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">{new Date(repository.created_at).toLocaleDateString()}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">{formatDate(repository.created_at)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
                         <Link
                           className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"

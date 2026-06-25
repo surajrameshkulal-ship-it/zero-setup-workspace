@@ -112,7 +112,7 @@ export default function RulesPage() {
       </div>
 
       {isLoading ? <LoadingState label="Loading rules" /> : null}
-      {loadError ? <ErrorState message={loadError} /> : null}
+      {loadError ? <ErrorState message={loadError} onRetry={() => reload().catch(() => undefined)} /> : null}
       {error ? <div className="mb-4"><ErrorState message={error} /></div> : null}
 
       {data && tab === "company" ? (
@@ -233,7 +233,12 @@ export default function RulesPage() {
 
 function CompanyRuleTable({ rules }: { rules: CompanyRule[] }) {
   if (rules.length === 0) {
-    return <EmptyState title="No company rules" />;
+    return (
+      <EmptyState
+        title="No company rules"
+        description="Add a company rule using the form to enforce organization policies on every pull request."
+      />
+    );
   }
 
   return (
@@ -271,7 +276,12 @@ function CompanyRuleTable({ rules }: { rules: CompanyRule[] }) {
 
 function ArchitectureRuleTable({ rules }: { rules: ArchitectureRule[] }) {
   if (rules.length === 0) {
-    return <EmptyState title="No architecture rules" />;
+    return (
+      <EmptyState
+        title="No architecture rules"
+        description="Define architecture rules to catch layer-boundary and dependency violations automatically."
+      />
+    );
   }
 
   return (

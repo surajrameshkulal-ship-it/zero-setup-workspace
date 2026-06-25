@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { use, useCallback } from "react";
+import type { ReactNode } from "react";
 import { ArrowLeft, FileCode2, Gauge, GitPullRequestArrow, ShieldAlert } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { RiskBadge, SeverityBadge, StatusBadge } from "@/components/badges";
 import { EmptyState, ErrorState, LoadingState } from "@/components/data-state";
 import { MetricCard } from "@/components/metric-card";
 import { getScan } from "@/lib/api";
+import { formatDateTime, formatScore, shortSha } from "@/lib/format";
 import { useApiResource } from "@/hooks/use-api-resource";
 import type { Finding } from "@/types/api";
 
@@ -52,6 +54,83 @@ function FindingTable({ title, findings }: { title: string; findings: Finding[] 
   );
 }
 
+function MarkdownBlock({ markdown }: { markdown: string }) {
+  const nodes: ReactNode[] = [];
+  let listItems: string[] = [];
+
+  function flushList(key: string) {
+    if (listItems.length === 0) {
+      return;
+    }
+    nodes.push(
+      <ul key={key} className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+        {listItems.map((item, index) => (
+          <li key={`${key}-${index}`}>{item}</li>
+        ))}
+      </ul>
+    );
+    listItems = [];
+  }
+
+  markdown.split(/\r?\n/).forEach((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line) {
+      flushList(`list-${index}`);
+      return;
+    }
+
+    const bullet = line.match(/^[-*]\s+(.*)$/);
+    if (bullet) {
+      listItems.push(bullet[1]);
+      return;
+    }
+
+    flushList(`list-${index}`);
+
+    if (line.startsWith("### ")) {
+      nodes.push(
+        <h3 key={index} className="pt-2 text-sm font-semibold text-ink">
+          {line.slice(4)}
+        </h3>
+      );
+    } else if (line.startsWith("## ")) {
+      nodes.push(
+        <h2 key={index} className="pt-2 text-base font-semibold text-ink">
+          {line.slice(3)}
+        </h2>
+      );
+    } else if (line.startsWith("# ")) {
+      nodes.push(
+        <h2 key={index} className="text-base font-semibold text-ink">
+          {line.slice(2)}
+        </h2>
+      );
+    } else {
+      nodes.push(
+        <p key={index} className="text-sm leading-6 text-slate-700">
+          {line}
+        </p>
+      );
+    }
+  });
+  flushList("list-final");
+
+  return <div className="space-y-3">{nodes}</div>;
+}
+
+function AIReviewSection({ markdown }: { markdown: string | null }) {
+  return (
+    <section className="rounded-lg border border-line bg-panel shadow-surface">
+      <div className="border-b border-line px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink">AI Review</h2>
+      </div>
+      <div className="p-4">
+        {markdown && markdown.trim().length > 0 ? <MarkdownBlock markdown={markdown} /> : <EmptyState title="AI review not available for this scan" />}
+      </div>
+    </section>
+  );
+}
+
 export default function ScanDetailPage({
   params,
 }: {
@@ -61,7 +140,7 @@ export default function ScanDetailPage({
 
   const loader = useCallback(() => getScan(scanId), [scanId]);
 
-  const { data: scan, error, isLoading } = useApiResource(loader);
+  const { data: scan, error, isLoading, reload } = useApiResource(loader);
 
   return (
     <AppShell
@@ -77,7 +156,7 @@ export default function ScanDetailPage({
       }
     >
       {isLoading ? <LoadingState label="Loading scan" /> : null}
-      {error ? <ErrorState message={error} /> : null}
+      {error ? <ErrorState message={error} onRetry={() => reload().catch(() => undefined)} /> : null}
       {scan ? (
         <div className="space-y-6">
           <section className="rounded-lg border border-line bg-panel p-4 shadow-surface">
@@ -104,11 +183,11 @@ export default function ScanDetailPage({
             <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
               <div>
                 <dt className="text-slate-500">Head SHA</dt>
-                <dd className="font-mono text-slate-800">{scan.head_sha.slice(0, 12)}</dd>
+                <dd className="font-mono text-slate-800">{shortSha(scan.head_sha)}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Base SHA</dt>
-                <dd className="font-mono text-slate-800">{scan.base_sha?.slice(0, 12) ?? "-"}</dd>
+                <dd className="font-mono text-slate-800">{shortSha(scan.base_sha)}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Check Run</dt>
@@ -119,10 +198,28 @@ export default function ScanDetailPage({
                 <dd className="text-slate-800">{scan.trigger}</dd>
               </div>
             </dl>
+            <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <dt className="text-slate-500">Started</dt>
+                <dd className="text-slate-800">{formatDateTime(scan.started_at)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Completed</dt>
+                <dd className="text-slate-800">{formatDateTime(scan.completed_at)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Created</dt>
+                <dd className="text-slate-800">{formatDateTime(scan.created_at)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Updated</dt>
+                <dd className="text-slate-800">{formatDateTime(scan.updated_at)}</dd>
+              </div>
+            </dl>
           </section>
 
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard icon={Gauge} label="Risk score" value={scan.risk_score ?? "-"} detail="/100" />
+            <MetricCard icon={Gauge} label="Risk score" value={formatScore(scan.risk_score)} detail="/100" />
             <MetricCard icon={ShieldAlert} label="Findings" value={scan.findings_count} />
             <MetricCard icon={FileCode2} label="Files changed" value={scan.files_changed} />
             <MetricCard icon={GitPullRequestArrow} label="Line delta" value={`+${scan.lines_added} / -${scan.lines_deleted}`} />
@@ -132,6 +229,8 @@ export default function ScanDetailPage({
           {scan.summary ? (
             <section className="rounded-lg border border-line bg-panel p-4 text-sm text-slate-700 shadow-surface">{scan.summary}</section>
           ) : null}
+
+          <AIReviewSection markdown={scan.ai_review_markdown} />
 
           <div className="grid gap-6 xl:grid-cols-2">
             <FindingTable title="Company rule violations" findings={scan.company_rule_violations} />

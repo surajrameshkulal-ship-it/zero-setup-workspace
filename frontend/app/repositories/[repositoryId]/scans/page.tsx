@@ -5,8 +5,9 @@ import { use, useCallback } from "react";
 import { ArrowLeft } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { RiskBadge, StatusBadge } from "@/components/badges";
-import { EmptyState, ErrorState, LoadingState } from "@/components/data-state";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/data-state";
 import { getRepository, listRepositoryScans } from "@/lib/api";
+import { formatDateTime, formatScore } from "@/lib/format";
 import { useApiResource } from "@/hooks/use-api-resource";
 
 export default function RepositoryScanHistoryPage({
@@ -27,7 +28,7 @@ export default function RepositoryScanHistoryPage({
     },
     [repositoryId]
   );
-  const { data, error, isLoading } = useApiResource(loader);
+  const { data, error, isLoading, reload } = useApiResource(loader);
 
   return (
     <AppShell
@@ -42,8 +43,8 @@ export default function RepositoryScanHistoryPage({
         </Link>
       }
     >
-      {isLoading ? <LoadingState label="Loading scan history" /> : null}
-      {error ? <ErrorState message={error} /> : null}
+      {isLoading ? <TableSkeleton rows={5} columns={6} /> : null}
+      {error ? <ErrorState message={error} onRetry={() => reload().catch(() => undefined)} /> : null}
       {data ? (
         <section className="rounded-lg border border-line bg-panel shadow-surface">
           <div className="border-b border-line px-4 py-3">
@@ -51,7 +52,10 @@ export default function RepositoryScanHistoryPage({
             <p className="mt-1 text-sm text-slate-500">{data.repository.default_branch}</p>
           </div>
           {data.scans.length === 0 ? (
-            <EmptyState title="No scans for this repository" />
+            <EmptyState
+              title="No scans for this repository"
+              description="This repository has not been scanned yet. A scan runs automatically the next time a pull request is opened or updated."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-line text-sm">
@@ -80,11 +84,11 @@ export default function RepositoryScanHistoryPage({
                       <td className="whitespace-nowrap px-4 py-3">
                         <div className="flex items-center gap-2">
                           <RiskBadge level={scan.risk_level} />
-                          <span className="text-slate-500">{scan.risk_score ?? "-"}</span>
+                          <span className="text-slate-500">{formatScore(scan.risk_score)}</span>
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-700">{scan.findings_count}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">{new Date(scan.created_at).toLocaleString()}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">{formatDateTime(scan.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
