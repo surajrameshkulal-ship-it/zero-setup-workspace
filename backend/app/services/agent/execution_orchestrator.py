@@ -56,6 +56,8 @@ class _Context:
     source_provider: Any | None = None
     validator: Any | None = None
     auto_fixer: Any | None = None
+    healing_fix_generator: Any | None = None
+    healing_result: dict | None = None
     materialization: Any | None = None
     handle: WorkspaceHandle | None = None
     code_plan: dict | None = None
@@ -100,6 +102,7 @@ class ExecutionOrchestrator:
         source_provider: Any | None = None,
         validator: Any | None = None,
         auto_fixer: Any | None = None,
+        healing_fix_generator: Any | None = None,
         timeout_seconds: float | None = None,
         now_fn: Callable[[], float] | None = None,
     ) -> ExecutionRun:
@@ -124,6 +127,7 @@ class ExecutionOrchestrator:
         logger.info("execution_started", extra={"execution_id": run.execution_id, "attempt": run.attempts})
 
         ctx = self._build_context(run, request, organization_id, actor_user_id, source_provider, validator, auto_fixer)
+        ctx.healing_fix_generator = healing_fix_generator
 
         for stage in STAGES:
             # Cancellation between stages.
@@ -216,6 +220,7 @@ class ExecutionOrchestrator:
                 ctx.handle.path, db=self.db, organization_id=ctx.organization_id
             )
             validator = build_runner_validator(runner)
+
         run = ValidationService(self.db).run(
             engineering_request_id=ctx.request.id,
             organization_id=ctx.organization_id,
@@ -223,6 +228,32 @@ class ExecutionOrchestrator:
             validator=validator,
             auto_fixer=ctx.auto_fixer,
         )
+
+        # On failure, attempt AI self-healing inside the workspace, then re-validate.
+        if run.status != "passed" and ctx.handle is not None:
+            from app.services.agent.self_healing_engine import SelfHealingEngine
+
+            healing = SelfHealingEngine(self.db, workspace_manager=self.workspace_manager).heal(
+                request=ctx.request,
+                organization_id=ctx.organization_id,
+                actor_user_id=ctx.actor_user_id,
+                handle=ctx.handle,
+                initial_checks=run.checks,
+                validator=validator,
+                repository_dna=getattr(ctx.materialization, "language_hints", None) and ctx.materialization,
+                code_plan=ctx.code_plan,
+                fix_generator=ctx.healing_fix_generator,
+            )
+            ctx.healing_result = healing.as_dict()
+            if healing.status == "healed":
+                run = ValidationService(self.db).run(
+                    engineering_request_id=ctx.request.id,
+                    organization_id=ctx.organization_id,
+                    actor_user_id=ctx.actor_user_id,
+                    validator=validator,
+                    auto_fixer=ctx.auto_fixer,
+                )
+
         if run.status != "passed":
             raise AppError("Validation failed; no draft pull request was created.")
         ctx.validation_run_id = run.id
@@ -315,6 +346,7 @@ class ExecutionOrchestrator:
             "draft_pull_request_id": str(run.draft_pull_request_id) if run.draft_pull_request_id else None,
             "validation_run_id": str(run.validation_run_id) if run.validation_run_id else None,
             "workspace_path": run.workspace_path,
+            "healing": ctx.healing_result,
         }
 
     def _get_or_create_run(self, request: EngineeringRequest, organization_id: uuid.UUID) -> ExecutionRun:

@@ -405,6 +405,53 @@ def test_orchestrator_uses_real_validation_runner(api_context, monkeypatch, tmp_
     assert run.draft_pull_request_id is not None
 
 
+def test_orchestrator_self_heals_then_drafts_pr(api_context, monkeypatch, tmp_path) -> None:
+    from types import SimpleNamespace
+
+    request = _approved_request(api_context, monkeypatch, connect=True)
+    orch = _orchestrator(api_context, tmp_path)
+
+    workdir = tmp_path / "heal-ws"
+    workdir.mkdir()
+
+    def fake_materialize(self, ctx):
+        ctx.materialization = SimpleNamespace(
+            materialized=True,
+            workspace_path=str(workdir),
+            target_branch="codedna/ai/feature-x",
+            default_branch="main",
+            language_hints=["Python"],
+        )
+        ctx.handle = self._handle_from(str(workdir), "codedna/ai/feature-x", "main")
+
+    monkeypatch.setattr(ExecutionOrchestrator, "_run_materialize", fake_materialize)
+    monkeypatch.setattr(ExecutionOrchestrator, "_run_generate", lambda self, ctx: None)
+    monkeypatch.setattr(ExecutionOrchestrator, "_run_apply", lambda self, ctx: None)
+
+    # Validation fails on the first call, passes afterward (after healing applies a fix).
+    seq = {"i": 0}
+
+    def validator(context, attempt):
+        seq["i"] += 1
+        status = "failed" if seq["i"] == 1 else "passed"
+        return [{"name": "pytest", "status": status, "details": "x"}]
+
+    def fix_gen(failures, context):
+        return [{"path": "src/fix.py", "operations": [{"type": "create_file", "content": "ok\n"}]}]
+
+    run = orch.execute(
+        engineering_request_id=request.id,
+        organization_id=api_context.organization.id,
+        actor_user_id=api_context.user.id,
+        validator=validator,
+        healing_fix_generator=fix_gen,
+    )
+    assert run.status == "completed"
+    assert run.draft_pull_request_id is not None
+    assert run.report["healing"]["status"] == "healed"
+    assert (workdir / "src/fix.py").read_text() == "ok\n"
+
+
 def test_requires_approved_request(api_context, monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(EngineeringPlanningService, "_call_ai", lambda self, prompt: None)
     created = api_context.client.post(

@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     # Safe change applier limits (Phase 10).
     change_apply_max_files: int = 50
     change_apply_max_diff_kb: int = 512
+    # AI self-healing retry limit (Phase 10).
+    self_healing_max_retries: int = 3
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
