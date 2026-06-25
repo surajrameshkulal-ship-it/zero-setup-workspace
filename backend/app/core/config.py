@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     semgrep_config: str = "auto"
     semgrep_timeout_seconds: int = 120
 
+    # Secure workspace manager (Phase 10). Isolated temp dirs for future AI code
+    # execution. If workspace_root is unset, a dedicated subdir of the system
+    # temp directory is used. workspaces are never created outside this base.
+    workspace_root: str | None = None
+    workspace_max_size_mb: int = 50
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
