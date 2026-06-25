@@ -52,6 +52,8 @@ class CheckRunReportBuilder:
         else:
             summary_lines.append("- No company or architecture rule violations detected.")
 
+        summary_lines.extend(self.ai_review_lines(report))
+
         return {
             "title": CHECK_RUN_OUTPUT_TITLE,
             "summary": "\n".join(summary_lines),
@@ -77,3 +79,36 @@ class CheckRunReportBuilder:
     def top_violations(self, report: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
         violations = (report.get("company_rule_violations") or []) + (report.get("architecture_violations") or [])
         return violations[:limit]
+
+    def ai_review_lines(self, report: dict[str, Any]) -> list[str]:
+        ai = report.get("ai") or {}
+        review = report.get("ai_review") or {}
+        if not review:
+            return ["", "### AI Review", "- AI review was not included in this scan report."]
+
+        lines = ["", "### AI Review"]
+        if ai.get("skipped"):
+            lines.append(f"- {self._truncate(str(review.get('summary') or 'AI review skipped.'), 700)}")
+            return lines
+
+        section_map = [
+            ("Summary", [review.get("summary")] if review.get("summary") else []),
+            ("Security issues", review.get("security_issues") or []),
+            ("Bug risks", review.get("bug_risks") or []),
+            ("Performance concerns", review.get("performance_concerns") or []),
+            ("Maintainability suggestions", review.get("maintainability_suggestions") or []),
+            ("Recommended action", [review.get("recommended_action")] if review.get("recommended_action") else []),
+        ]
+        for title, values in section_map:
+            lines.append(f"**{title}**")
+            if values:
+                for value in values[:3]:
+                    lines.append(f"- {self._truncate(str(value), 700)}")
+            else:
+                lines.append("- None identified.")
+        return lines
+
+    def _truncate(self, value: str, max_chars: int) -> str:
+        if len(value) <= max_chars:
+            return value
+        return f"{value[:max_chars]}..."
