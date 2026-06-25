@@ -15,3 +15,7 @@ dist/
 build/
 coverage/
 .DS_Store
+
+# Next.js / TypeScript generated
+*.tsbuildinfo
+next-env.d.ts
