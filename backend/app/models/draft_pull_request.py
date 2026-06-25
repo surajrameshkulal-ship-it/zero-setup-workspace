@@ -48,9 +48,11 @@ class DraftPullRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     labels: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
-    # Always False in this phase: the agent never pushes or opens PRs.
+    # Set True only after a human-initiated push that opens a real draft PR.
     is_pushed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     human_approval_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    github_pr_number: Mapped[int | None] = mapped_column(nullable=True)
+    github_pr_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     organization = relationship("Organization", back_populates="draft_pull_requests")
     engineering_request = relationship("EngineeringRequest")

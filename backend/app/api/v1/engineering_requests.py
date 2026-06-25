@@ -24,6 +24,7 @@ from app.schemas.engineering_request import (
 from app.schemas.execution_plan import ExecutionPlanRead
 from app.services.agent.code_generation_service import CodeGenerationService
 from app.services.agent.draft_pr_service import DraftPullRequestService
+from app.services.agent.github_draft_pr_creator import GitHubDraftPRCreator
 from app.services.agent.validation_service import ValidationService
 from app.services.engineering_request_service import EngineeringRequestService
 from app.services.execution.execution_plan_service import ExecutionPlanService
@@ -182,6 +183,24 @@ def get_draft_pull_request(
     db: Session = Depends(get_db),
 ) -> DraftPullRequest:
     return DraftPullRequestService(db).get_for_request(request_id, current_user.organization_id)
+
+
+@router.post("/{request_id}/create-draft-pr", response_model=DraftPullRequestRead)
+def create_github_draft_pull_request(
+    request_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DraftPullRequest:
+    """Human-initiated: push validated workspace changes and open a real draft PR.
+
+    Refuses to push to protected branches, on failed validation, or with
+    forbidden files; never merges or deploys.
+    """
+    return GitHubDraftPRCreator(db).create(
+        engineering_request_id=request_id,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+    )
 
 
 @router.post("/{request_id}/validate", response_model=ValidationRunRead)

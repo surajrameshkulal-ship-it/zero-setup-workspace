@@ -20,6 +20,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/data-state";
 import {
   analyzeEngineeringRequest,
   approveEngineeringRequestPlan,
+  createGithubDraftPullRequest,
   generateCodePreview,
   generateExecutionPlan,
   getCodePreview,
@@ -615,20 +616,50 @@ export default function EngineeringRequestDetailPage({
                 <GitPullRequest className="h-4 w-4 text-brand" aria-hidden="true" />
                 <h2 className="text-sm font-semibold text-ink">Draft pull request</h2>
               </div>
-              <button
-                type="button"
-                disabled={(!isApproved && !draftPr) || busy !== null}
-                onClick={() => run("draftpr", () => prepareDraftPullRequest(request.id))}
-                className="focus-ring inline-flex items-center gap-2 rounded border border-line bg-panel px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-mist disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Play className="h-4 w-4" aria-hidden="true" />
-                {busy === "draftpr" ? "Preparing" : draftPr ? "Regenerate draft" : "Prepare draft PR"}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={(!isApproved && !draftPr) || busy !== null}
+                  onClick={() => run("draftpr", () => prepareDraftPullRequest(request.id))}
+                  className="focus-ring inline-flex items-center gap-2 rounded border border-line bg-panel px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-mist disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Play className="h-4 w-4" aria-hidden="true" />
+                  {busy === "draftpr" ? "Preparing" : draftPr ? "Regenerate draft" : "Prepare draft PR"}
+                </button>
+                {draftPr && !draftPr.is_pushed ? (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => run("github_pr", () => createGithubDraftPullRequest(request.id))}
+                    className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#125870] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <GitPullRequest className="h-4 w-4" aria-hidden="true" />
+                    {busy === "github_pr" ? "Creating" : "Create draft PR on GitHub"}
+                  </button>
+                ) : null}
+              </div>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Metadata only. No branch is pushed, no PR is opened, nothing is merged or deployed.
+              Preparing builds metadata only. Creating opens a real <strong>draft</strong> PR on a
+              codedna/ai branch — never merged or deployed, and human review is required.
               {isApproved || draftPr ? null : " Approve the plan first to enable."}
             </p>
+            {draftPr?.is_pushed && draftPr.github_pr_url ? (
+              <div className="mt-3 flex flex-wrap items-center gap-3 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                <a
+                  href={draftPr.github_pr_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="focus-ring inline-flex items-center gap-2 font-semibold text-emerald-800 hover:underline"
+                >
+                  <GitPullRequest className="h-4 w-4" aria-hidden="true" />
+                  Draft PR #{draftPr.github_pr_number}
+                </a>
+                <span className="inline-flex rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                  Human review required
+                </span>
+              </div>
+            ) : null}
           </section>
 
           {draftPr ? (

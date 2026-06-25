@@ -19,5 +19,7 @@ class DraftPullRequestRead(ORMModel):
     status: str
     is_pushed: bool
     human_approval_required: bool
+    github_pr_number: int | None
+    github_pr_url: str | None
     created_at: datetime
     updated_at: datetime

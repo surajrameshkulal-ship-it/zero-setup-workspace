@@ -317,6 +317,12 @@ export async function getDraftPullRequest(requestId: string): Promise<DraftPullR
   }
 }
 
+export function createGithubDraftPullRequest(requestId: string): Promise<DraftPullRequest> {
+  return apiFetch<DraftPullRequest>(`/engineering-requests/${requestId}/create-draft-pr`, {
+    method: "POST"
+  });
+}
+
 export function runValidation(requestId: string): Promise<ValidationRun> {
   return apiFetch<ValidationRun>(`/engineering-requests/${requestId}/validate`, { method: "POST" });
 }

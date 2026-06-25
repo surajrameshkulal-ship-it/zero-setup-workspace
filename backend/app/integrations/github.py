@@ -153,6 +153,56 @@ class GitHubIntegration:
         except UnicodeDecodeError:
             return None
 
+    def get_branch_sha(self, *, token: str, owner: str, repo: str, branch: str) -> str:
+        response = self._request("GET", f"/repos/{owner}/{repo}/git/ref/heads/{branch}", token=token)
+        return response.json()["object"]["sha"]
+
+    def create_branch(self, *, token: str, owner: str, repo: str, branch: str, sha: str) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/repos/{owner}/{repo}/git/refs",
+            token=token,
+            json={"ref": f"refs/heads/{branch}", "sha": sha},
+        ).json()
+
+    def get_content_sha(self, *, token: str, owner: str, repo: str, path: str, ref: str) -> str | None:
+        try:
+            response = self._request(
+                "GET", f"/repos/{owner}/{repo}/contents/{path}", token=token, params={"ref": ref}
+            )
+        except IntegrationError:
+            return None
+        data = response.json()
+        return data.get("sha") if isinstance(data, dict) else None
+
+    def put_file(
+        self, *, token: str, owner: str, repo: str, path: str, content_b64: str, message: str, branch: str, sha: str | None = None
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"message": message, "content": content_b64, "branch": branch}
+        if sha:
+            payload["sha"] = sha
+        return self._request("PUT", f"/repos/{owner}/{repo}/contents/{path}", token=token, json=payload).json()
+
+    def delete_file(
+        self, *, token: str, owner: str, repo: str, path: str, message: str, branch: str, sha: str
+    ) -> dict[str, Any]:
+        return self._request(
+            "DELETE",
+            f"/repos/{owner}/{repo}/contents/{path}",
+            token=token,
+            json={"message": message, "branch": branch, "sha": sha},
+        ).json()
+
+    def create_pull_request(
+        self, *, token: str, owner: str, repo: str, head: str, base: str, title: str, body: str, draft: bool = True
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/repos/{owner}/{repo}/pulls",
+            token=token,
+            json={"head": head, "base": base, "title": title, "body": body, "draft": draft},
+        ).json()
+
     def create_pr_comment(
         self,
         *,

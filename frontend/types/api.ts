@@ -299,6 +299,8 @@ export type DraftPullRequest = {
   status: string;
   is_pushed: boolean;
   human_approval_required: boolean;
+  github_pr_number: number | null;
+  github_pr_url: string | null;
   created_at: string;
   updated_at: string;
 };
