@@ -3,10 +3,11 @@ import logging
 import time
 import uuid
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.api.v1.health import get_health_check_service
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
@@ -57,12 +58,11 @@ def create_app() -> FastAPI:
         return response
 
     @app.get("/health", tags=["health"])
-    def health() -> dict:
-        return {"status": "ok", "service": settings.app_name}
+    def health(service=Depends(get_health_check_service)) -> dict:
+        return service.check()
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
     return app
 
 
 app = create_app()
-

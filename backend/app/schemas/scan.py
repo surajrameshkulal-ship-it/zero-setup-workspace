@@ -64,6 +64,8 @@ class ScanListItem(ORMModel):
 class ScanDetail(ScanRead):
     repository_full_name: str | None
     findings_count: int
+    ai_review: dict | None
+    ai_review_markdown: str | None
 
 
 class ScanQueuedResponse(BaseModel):

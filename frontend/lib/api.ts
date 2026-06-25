@@ -3,6 +3,9 @@ import type {
   AuthResponse,
   CompanyRule,
   DashboardResponse,
+  DeadLetterScan,
+  HealthStatus,
+  QueueMetrics,
   Repository,
   RiskLevel,
   ScanDetail,
@@ -103,6 +106,18 @@ export function getMe(): Promise<User> {
 
 export function getDashboard(): Promise<DashboardResponse> {
   return apiFetch<DashboardResponse>("/dashboard");
+}
+
+export function getHealth(): Promise<HealthStatus> {
+  return apiFetch<HealthStatus>("/health");
+}
+
+export function getQueueMetrics(): Promise<QueueMetrics> {
+  return apiFetch<QueueMetrics>("/admin/queue-metrics");
+}
+
+export function listDeadLetterScans(): Promise<DeadLetterScan[]> {
+  return apiFetch<DeadLetterScan[]>("/admin/dead-letter-scans");
 }
 
 export function listRepositories(): Promise<Repository[]> {

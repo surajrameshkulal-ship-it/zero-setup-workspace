@@ -10,7 +10,7 @@ from app.core.errors import IntegrationError, NotFoundError
 from app.integrations.github import GitHubIntegration
 from app.models.rule import ArchitectureRule, CompanyRule
 from app.models.scan import PullRequestScan, RiskLevel, ScanStatus
-from app.services.ai_review_service import AIReviewService
+from app.services.ai_review.ai_review_service import AIReviewService
 from app.services.architecture_checker import ArchitectureRuleChecker
 from app.services.audit_service import AuditService
 from app.services.check_run_report import CHECK_RUN_NAME, CheckRunReportBuilder
@@ -81,7 +81,7 @@ class PullRequestScanService:
             self.db.scalars(query)
         )
 
-    def run(self, scan_id: uuid.UUID) -> PullRequestScan:
+    def run(self, scan_id: uuid.UUID, *, mark_failed_on_error: bool = True) -> PullRequestScan:
         scan = self.db.scalar(select(PullRequestScan).where(PullRequestScan.id == scan_id))
         if not scan:
             raise NotFoundError("Scan not found")
@@ -145,9 +145,17 @@ class PullRequestScanService:
                 "risk": risk,
                 "semgrep_findings": semgrep_findings,
                 "ai_findings": ai_findings,
+                "ai_review": ai_review.get("review", {}),
+                "ai_review_markdown": ai_review.get("markdown"),
                 "company_rule_violations": company_rule_violations,
                 "architecture_violations": architecture_violations,
-                "ai": {"model": ai_review.get("model"), "enabled": ai_review.get("enabled")},
+                "ai": {
+                    "provider": ai_review.get("provider"),
+                    "model": ai_review.get("model"),
+                    "enabled": ai_review.get("enabled"),
+                    "skipped": ai_review.get("skipped", False),
+                    "skip_reason": ai_review.get("skip_reason"),
+                },
             }
             report["github_check_run_id"] = scan.github_check_run_id
 
@@ -187,19 +195,30 @@ class PullRequestScanService:
             return scan
         except Exception as exc:
             logger.exception("scan_failed", extra={"scan_id": str(scan.id)})
-            scan.status = ScanStatus.FAILED
-            scan.failure_reason = str(exc)
-            scan.completed_at = datetime.now(timezone.utc)
-            self._fail_check_run(scan, str(exc))
-            AuditService(self.db).log(
-                organization_id=scan.organization_id,
-                action="scan.failed",
-                target_type="pull_request_scan",
-                target_id=str(scan.id),
-                metadata={"error": str(exc)},
-            )
-            self.db.commit()
+            self.db.rollback()
+            if mark_failed_on_error:
+                self.mark_failed(scan.id, str(exc))
             raise
+
+    def mark_failed(self, scan_id: uuid.UUID, failure_reason: str) -> PullRequestScan:
+        scan = self.db.scalar(select(PullRequestScan).where(PullRequestScan.id == scan_id))
+        if not scan:
+            raise NotFoundError("Scan not found")
+
+        scan.status = ScanStatus.FAILED
+        scan.failure_reason = failure_reason
+        scan.completed_at = datetime.now(timezone.utc)
+        self._fail_check_run(scan, failure_reason)
+        AuditService(self.db).log(
+            organization_id=scan.organization_id,
+            action="scan.failed",
+            target_type="pull_request_scan",
+            target_id=str(scan.id),
+            metadata={"error": failure_reason},
+        )
+        self.db.commit()
+        self.db.refresh(scan)
+        return scan
 
     def _mark_check_run_in_progress(self, scan: PullRequestScan) -> None:
         repository = scan.repository

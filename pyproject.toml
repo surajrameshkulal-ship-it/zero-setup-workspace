@@ -21,6 +21,7 @@ dependencies = [
     "pydantic-settings==2.5.2",
     "python-jose[cryptography]==3.3.0",
     "python-multipart==0.0.9",
+    "redis==5.0.8",
     "requests==2.32.3",
     "semgrep==1.87.0",
     "sqlalchemy==2.0.35",
@@ -28,8 +29,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+test = [
+    "pytest==8.3.3",
+    "pytest-asyncio==0.24.0",
+]
 dev = [
     "pytest==8.3.3",
+    "pytest-asyncio==0.24.0",
     "pytest-cov==5.0.0",
 ]
 

@@ -53,6 +53,8 @@ def test_scan_detail_is_scoped_to_current_organization(api_context) -> None:
     assert payload["company_rule_violations"] == [{"title": "No console.log", "severity": "medium"}]
     assert payload["architecture_violations"] == [{"title": "No UI to DB import", "severity": "high"}]
     assert payload["github_check_run_id"] == 12345
+    assert payload["ai_review"]["summary"] == "Review found logging concerns."
+    assert payload["ai_review_markdown"] == "### Summary\n- Review found logging concerns."
 
     forbidden = api_context.client.get(f"/api/v1/scans/{api_context.other_scan.id}")
 

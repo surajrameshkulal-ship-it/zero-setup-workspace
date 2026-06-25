@@ -6,6 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.core.errors import IntegrationError
+from app.models.github import GitHubInstallation
+from app.models.scan import PullRequestScan, ScanStatus
 from app.services.check_run_report import CHECK_RUN_NAME, CheckRunReportBuilder
 from app.services.scan_service import PullRequestScanService
 
@@ -26,10 +28,15 @@ class FakeGitHub:
     def __init__(self, response: dict) -> None:
         self.response = response
         self.created_payloads = []
+        self.updated_payloads = []
 
     def create_check_run(self, **kwargs):
         self.created_payloads.append(kwargs)
         return self.response
+
+    def update_check_run(self, **kwargs):
+        self.updated_payloads.append(kwargs)
+        return {}
 
 
 def build_service(fake_db: FakeDB, fake_github: FakeGitHub) -> PullRequestScanService:
@@ -96,3 +103,61 @@ def test_check_run_creation_missing_id_raises_without_committing() -> None:
     assert scan.github_check_run_id is None
     assert fake_db.commit_count == 0
 
+
+def test_mark_failed_updates_github_check_run_as_failure(api_context) -> None:
+    installation = GitHubInstallation(
+        organization_id=api_context.organization.id,
+        installation_id=142102916,
+        account_login="acme",
+        account_type="Organization",
+        permissions={"checks": "write"},
+    )
+    api_context.db.add(installation)
+    api_context.db.flush()
+    api_context.repository.github_installation_id = installation.id
+
+    scan = PullRequestScan(
+        organization_id=api_context.organization.id,
+        repository_id=api_context.repository.id,
+        github_pr_number=55,
+        title="Retry failure",
+        head_sha="a" * 40,
+        base_sha="b" * 40,
+        github_check_run_id=987654,
+        status=ScanStatus.RUNNING,
+        trigger="webhook",
+        semgrep_findings=[],
+        ai_findings=[],
+        company_rule_violations=[],
+        architecture_violations=[],
+        report={},
+    )
+    api_context.db.add(scan)
+    api_context.db.commit()
+
+    fake_github = FakeGitHub({})
+    service = PullRequestScanService(api_context.db, github=fake_github)
+
+    service.mark_failed(scan.id, "Retries exhausted: GitHub timeout")
+
+    api_context.db.refresh(scan)
+    assert scan.status == ScanStatus.FAILED
+    assert scan.failure_reason == "Retries exhausted: GitHub timeout"
+    assert fake_github.updated_payloads == [
+        {
+            "installation_id": 142102916,
+            "owner": "acme",
+            "repo": "payments-api",
+            "check_run_id": 987654,
+            "status": "completed",
+            "conclusion": "failure",
+            "completed_at": fake_github.updated_payloads[0]["completed_at"],
+            "output": {
+                "title": "CodeDNA AI Scan Failed",
+                "summary": (
+                    "The scan failed before producing a complete report.\n\n"
+                    "Error: Retries exhausted: GitHub timeout"
+                ),
+            },
+        }
+    ]

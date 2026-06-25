@@ -14,8 +14,7 @@ COPY pyproject.toml README.md ./
 COPY backend ./backend
 
 RUN pip install --upgrade pip \
-    && pip install -e . \
-    && pip install "redis>=5.0.0"
+    && pip install -e ".[dev]"
 
 WORKDIR /app/backend
 

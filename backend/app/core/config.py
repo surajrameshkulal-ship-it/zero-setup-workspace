@@ -22,6 +22,19 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
 
+    ai_provider: str = "groq"
+    ai_review_enabled: bool = True
+    ai_review_timeout_seconds: int = 60
+    ai_daily_request_limit: int = 0
+    ai_monthly_request_limit: int = 0
+    ai_max_files_per_review: int = 40
+    ai_max_diff_chars: int = 80000
+    groq_api_key: str | None = None
+    groq_model: str = "llama-3.1-8b-instant"
+    ollama_base_url: AnyHttpUrl = "http://host.docker.internal:11434"
+    ollama_model: str = "llama3.1:8b"
+    ollama_timeout_seconds: int = 120
+
     github_app_id: str | None = None
     github_app_slug: str | None = None
     github_private_key: str | None = None

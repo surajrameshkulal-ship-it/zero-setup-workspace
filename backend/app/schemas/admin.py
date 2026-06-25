@@ -20,3 +20,12 @@ class AdminSettingRead(ORMModel):
     created_at: datetime
     updated_at: datetime
 
+
+class DeadLetterScanItem(BaseModel):
+    scan_id: uuid.UUID
+    repository_id: uuid.UUID
+    pull_request_number: int
+    head_sha: str
+    error_message: str
+    failed_at: datetime
+    retry_count: int

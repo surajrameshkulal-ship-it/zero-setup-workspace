@@ -74,6 +74,8 @@ export type ScanDetail = ScanListItem & {
   company_rule_violations: Finding[];
   architecture_violations: Finding[];
   report: Record<string, unknown>;
+  ai_review: Record<string, unknown> | null;
+  ai_review_markdown: string | null;
   started_at: string | null;
   updated_at: string;
 };
@@ -127,4 +129,30 @@ export type ArchitectureRule = {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type HealthStatus = {
+  status: string;
+  app_status: string;
+  database_status: string;
+  redis_status: string;
+  celery_queue_reachable: boolean;
+  timestamp: string;
+};
+
+export type QueueMetrics = {
+  pending_scan_task_count: number;
+  dead_letter_count: number;
+  redis_connected: boolean;
+  queue_name: string;
+};
+
+export type DeadLetterScan = {
+  scan_id: string;
+  repository_id: string;
+  pull_request_number: number;
+  head_sha: string;
+  error_message: string;
+  failed_at: string;
+  retry_count: number;
 };

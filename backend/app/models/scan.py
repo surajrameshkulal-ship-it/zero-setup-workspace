@@ -46,6 +46,7 @@ class PullRequestScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     head_sha: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     base_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
     github_check_run_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
     status: Mapped[ScanStatus] = mapped_column(
         Enum(ScanStatus, name="scan_status", values_callable=lambda enum: [item.value for item in enum]),
         nullable=False,
@@ -89,3 +90,12 @@ class PullRequestScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
                 self.architecture_violations,
             )
         )
+
+    @property
+    def ai_review(self) -> dict | None:
+        return (self.report or {}).get("ai_review")
+
+    @property
+    def ai_review_markdown(self) -> str | None:
+        value = (self.report or {}).get("ai_review_markdown")
+        return value if isinstance(value, str) else None
