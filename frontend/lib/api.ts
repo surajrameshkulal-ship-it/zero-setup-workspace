@@ -13,6 +13,7 @@ import type {
   HealthStatus,
   QueueMetrics,
   Repository,
+  RepositoryDNA,
   RiskLevel,
   ScanDetail,
   ScanListItem,
@@ -128,6 +129,21 @@ export function listDeadLetterScans(): Promise<DeadLetterScan[]> {
 
 export function listRepositories(): Promise<Repository[]> {
   return apiFetch<Repository[]>("/repositories");
+}
+
+export function generateRepositoryDna(repositoryId: string): Promise<RepositoryDNA> {
+  return apiFetch<RepositoryDNA>(`/repositories/${repositoryId}/dna`, { method: "POST" });
+}
+
+export async function getRepositoryDna(repositoryId: string): Promise<RepositoryDNA | null> {
+  try {
+    return await apiFetch<RepositoryDNA>(`/repositories/${repositoryId}/dna`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export function getRepository(repositoryId: string): Promise<Repository> {

@@ -7,10 +7,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_admin
 from app.core.database import get_db
 from app.models.repository import Repository
+from app.models.repository_dna import RepositoryDNA
 from app.models.scan import PullRequestScan
 from app.models.user import User
 from app.schemas.repository import RepositoryConnectRequest, RepositoryRead, RepositoryUpdate
+from app.schemas.repository_dna import RepositoryDNARead
 from app.schemas.scan import ManualScanRequest, ScanListItem, ScanQueuedResponse
+from app.services.repository_dna_service import RepositoryDNAService
 from app.services.repository_service import RepositoryService
 from app.services.scan_service import PullRequestScanService
 
@@ -69,6 +72,29 @@ def list_repository_scans(
         repository_id=repository_id,
         limit=limit,
     )
+
+
+@router.post("/{repository_id}/dna", response_model=RepositoryDNARead)
+def generate_repository_dna(
+    repository_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RepositoryDNA:
+    """Generate a read-only DNA fingerprint for a repository. No cloning or Git writes."""
+    return RepositoryDNAService(db).generate(
+        repository_id=repository_id,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@router.get("/{repository_id}/dna", response_model=RepositoryDNARead)
+def get_repository_dna(
+    repository_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RepositoryDNA:
+    return RepositoryDNAService(db).get_for_repository(repository_id, current_user.organization_id)
 
 
 @router.post("/{repository_id}/scans", response_model=ScanQueuedResponse, status_code=202)

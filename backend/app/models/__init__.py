@@ -15,6 +15,7 @@ from app.models.execution_plan import (
 from app.models.github import GitHubInstallation
 from app.models.organization import Organization
 from app.models.repository import Repository
+from app.models.repository_dna import RepositoryDNA
 from app.models.rule import ArchitectureRule, CompanyRule, CompanyRuleType, Severity
 from app.models.scan import PullRequestScan, RiskLevel, ScanStatus
 from app.models.setting import AdminSetting
@@ -35,6 +36,7 @@ __all__ = [
     "Organization",
     "PullRequestScan",
     "Repository",
+    "RepositoryDNA",
     "RequestPriority",
     "RequestStatus",
     "RequestType",

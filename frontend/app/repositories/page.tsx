@@ -69,6 +69,12 @@ export default function RepositoriesPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-right">
                         <Link
                           className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
+                          href={`/repositories/${repository.id}/dna`}
+                        >
+                          DNA
+                        </Link>
+                        <Link
+                          className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
                           href={`/repositories/${repository.id}/scans`}
                         >
                           Scans

@@ -148,10 +148,18 @@ class EngineeringRequestService:
         self.db.flush()
 
         recent_scans = self._recent_scans(organization_id, request.repository_id)
+        repository_dna = None
+        if request.repository_id is not None:
+            from app.services.repository_dna_service import RepositoryDNAService
+
+            repository_dna = RepositoryDNAService(self.db).get_optional(
+                request.repository_id, organization_id
+            )
         plan = self.planning_service.generate_plan(
             request=request,
             repository=request.repository,
             recent_scans=recent_scans,
+            repository_dna=repository_dna,
         )
 
         request.ai_summary = plan["ai_summary"]

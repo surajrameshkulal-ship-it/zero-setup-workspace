@@ -77,8 +77,9 @@ class EngineeringPlanningService:
         request: EngineeringRequest,
         repository: Repository | None,
         recent_scans: list[PullRequestScan] | None = None,
+        repository_dna: object | None = None,
     ) -> dict[str, Any]:
-        prompt = self._build_prompt(request, repository, recent_scans or [])
+        prompt = self._build_prompt(request, repository, recent_scans or [], repository_dna)
         raw = self._call_ai(prompt)
         parsed = self._parse(raw) if raw else None
         return self._merge_with_safety(request, repository, parsed)
@@ -104,6 +105,7 @@ class EngineeringPlanningService:
         request: EngineeringRequest,
         repository: Repository | None,
         recent_scans: list[PullRequestScan],
+        repository_dna: object | None = None,
     ) -> str:
         repo_line = (
             f"Repository: {repository.full_name} (default branch: {repository.default_branch})"
@@ -116,6 +118,8 @@ class EngineeringPlanningService:
             for scan in recent_scans[:5]
         ) or "- No recent scans available."
 
+        dna_line = self._dna_summary(repository_dna)
+
         return (
             "You are an AI engineering planner. You ONLY produce a plan. You must "
             "never deploy, merge, push to main, or modify secrets. Every change must "
@@ -124,6 +128,7 @@ class EngineeringPlanningService:
             f"Request type: {request.request_type.value}\n"
             f"Description:\n{request.description}\n\n"
             f"{repo_line}\n"
+            f"Repository DNA: {dna_line}\n"
             f"Recent scans:\n{scan_lines}\n\n"
             "Return ONLY valid JSON with these keys:\n"
             '{\n'
@@ -139,6 +144,19 @@ class EngineeringPlanningService:
             '  "safety_notes": [string, ...]\n'
             '}\n'
         )
+
+    @staticmethod
+    def _dna_summary(repository_dna: object | None) -> str:
+        if repository_dna is None:
+            return "not available."
+        languages = getattr(repository_dna, "languages", None) or []
+        frameworks = getattr(repository_dna, "frameworks", None) or []
+        parts = []
+        if languages:
+            parts.append("languages: " + ", ".join(map(str, languages)))
+        if frameworks:
+            parts.append("frameworks: " + ", ".join(map(str, frameworks)))
+        return ("; ".join(parts) + ".") if parts else "available (no language/framework signals yet)."
 
     def _parse(self, raw: str | None) -> dict[str, Any] | None:
         if not raw:

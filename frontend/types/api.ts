@@ -226,6 +226,30 @@ export type CreateEngineeringRequestPayload = {
   repository_id?: string | null;
 };
 
+export type RepositoryDNA = {
+  id: string;
+  organization_id: string;
+  repository_id: string;
+  repository_full_name: string | null;
+  languages: string[];
+  frameworks: string[];
+  package_managers: string[];
+  databases: string[];
+  queues: string[];
+  testing_tools: string[];
+  build_tools: string[];
+  cicd: string[];
+  docker: { present?: boolean; files?: string[]; [key: string]: unknown };
+  security_tools: string[];
+  important_files: string[];
+  architecture_summary: string | null;
+  dependency_summary: { manifests_detected?: string[]; note?: string; [key: string]: unknown };
+  repository_health: { score?: number | null; status?: string; notes?: string[]; [key: string]: unknown };
+  risk_notes: string[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {
