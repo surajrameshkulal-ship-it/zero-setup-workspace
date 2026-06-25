@@ -1,0 +1,100 @@
+# =============================================================================
+# CodeDNA AI — PRODUCTION docker-compose
+# Self-contained deployment for a single VM (Postgres + Redis + API + worker +
+# frontend). For Railway/Render, deploy each service separately and use their
+# managed Postgres/Redis instead of the postgres/redis services below.
+#
+# Differences from the dev docker-compose.yml:
+#   - No --reload and no source bind-mounts (immutable images)
+#   - Frontend uses the "runner" target (next start, standalone) not "dev"
+#   - restart: unless-stopped on every long-running service
+#   - Secrets come from .env.production (never committed)
+#   - Postgres/Redis are not published to the host
+#
+# Usage:
+#   cp .env.production.example .env.production   # then fill it in
+#   export NEXT_PUBLIC_API_URL=https://api.yourdomain.com/api/v1
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+#   docker compose -f docker-compose.prod.yml up -d
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=INFO --concurrency=2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: runner
+      args:
+        # Build-time API URL (inlined into the bundle). Provide via shell env or
+        # the root .env file used by `docker compose` for variable substitution.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL before building}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
