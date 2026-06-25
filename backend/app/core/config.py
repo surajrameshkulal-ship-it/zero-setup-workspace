@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # temp directory is used. workspaces are never created outside this base.
     workspace_root: str | None = None
     workspace_max_size_mb: int = 50
+    # Safe change applier limits (Phase 10).
+    change_apply_max_files: int = 50
+    change_apply_max_diff_kb: int = 512
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
