@@ -5,14 +5,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import clsx from "clsx";
-import { GitBranch, LayoutDashboard, ListChecks, LogOut, ShieldCheck } from "lucide-react";
+import { GitBranch, LayoutDashboard, ListChecks, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/repositories", label: "Repositories", icon: GitBranch },
   { href: "/scans", label: "Scans", icon: ListChecks },
-  { href: "/rules", label: "Rules", icon: ShieldCheck }
+  { href: "/rules", label: "Rules", icon: ShieldCheck },
+  { href: "/admin/dead-letter-scans", label: "Dead letters", icon: ShieldAlert }
 ];
 
 export function AppShell({
@@ -64,11 +65,11 @@ export function AppShell({
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 border-b border-line bg-panel/95 backdrop-blur">
           <div className="flex min-h-16 items-center justify-between gap-4 px-4 py-3 sm:px-6">
-            <div>
-              <h1 className="text-xl font-semibold text-ink">{title}</h1>
-              {user ? <p className="text-sm text-slate-500">{user.full_name}</p> : null}
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold text-ink sm:text-xl">{title}</h1>
+              {user ? <p className="truncate text-sm text-slate-500">{user.full_name}</p> : null}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-none items-center gap-2">
               {actions}
               <button
                 type="button"

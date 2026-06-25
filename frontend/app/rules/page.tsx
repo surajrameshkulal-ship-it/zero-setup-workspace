@@ -243,6 +243,7 @@ function CompanyRuleTable({ rules }: { rules: CompanyRule[] }) {
 
   return (
     <section className="overflow-hidden rounded-lg border border-line bg-panel shadow-surface">
+      <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-line text-sm">
         <thead className="bg-mist text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
           <tr>
@@ -270,6 +271,7 @@ function CompanyRuleTable({ rules }: { rules: CompanyRule[] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }
@@ -286,6 +288,7 @@ function ArchitectureRuleTable({ rules }: { rules: ArchitectureRule[] }) {
 
   return (
     <section className="overflow-hidden rounded-lg border border-line bg-panel shadow-surface">
+      <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-line text-sm">
         <thead className="bg-mist text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
           <tr>
@@ -312,6 +315,7 @@ function ArchitectureRuleTable({ rules }: { rules: ArchitectureRule[] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }

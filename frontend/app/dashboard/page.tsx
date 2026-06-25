@@ -122,7 +122,7 @@ export default function DashboardPage() {
       {error ? <ErrorState message={error} onRetry={() => reload().catch(() => undefined)} /> : null}
       {data ? (
         <div className="space-y-6">
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <MetricCard icon={GitBranch} label="Repositories" value={data.dashboard.summary.total_repositories} />
             <MetricCard icon={ListChecks} label="Total scans" value={data.dashboard.summary.total_scans} />
             <MetricCard icon={CheckCircle2} label="Completed" value={data.dashboard.summary.completed_scans} />
@@ -131,7 +131,7 @@ export default function DashboardPage() {
             <MetricCard icon={Gauge} label="Average risk" value={formatScore(data.dashboard.summary.average_risk_score)} detail="/100" />
           </section>
 
-          <section className="grid gap-4 xl:grid-cols-3">
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <section className="rounded-lg border border-line bg-panel p-4 shadow-surface">
               <div className="flex items-start justify-between gap-3">
                 <div>
