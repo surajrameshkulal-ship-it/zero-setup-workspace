@@ -1,6 +1,12 @@
 from __future__ import annotations
 from app.models.audit import AuditLog
 from app.models.base import Base
+from app.models.engineering_request import (
+    EngineeringRequest,
+    RequestPriority,
+    RequestStatus,
+    RequestType,
+)
 from app.models.github import GitHubInstallation
 from app.models.organization import Organization
 from app.models.repository import Repository
@@ -16,10 +22,14 @@ __all__ = [
     "Base",
     "CompanyRule",
     "CompanyRuleType",
+    "EngineeringRequest",
     "GitHubInstallation",
     "Organization",
     "PullRequestScan",
     "Repository",
+    "RequestPriority",
+    "RequestStatus",
+    "RequestType",
     "RiskLevel",
     "ScanStatus",
     "Severity",

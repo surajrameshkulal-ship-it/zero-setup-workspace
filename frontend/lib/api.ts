@@ -2,8 +2,13 @@ import type {
   ArchitectureRule,
   AuthResponse,
   CompanyRule,
+  CreateEngineeringRequestPayload,
   DashboardResponse,
   DeadLetterScan,
+  EngineeringRequestDetail,
+  EngineeringRequestListItem,
+  EngineeringRequestStatus,
+  EngineeringRequestType,
   HealthStatus,
   QueueMetrics,
   Repository,
@@ -186,5 +191,59 @@ export function createArchitectureRule(payload: {
   return apiFetch<ArchitectureRule>("/rules/architecture", {
     method: "POST",
     body: JSON.stringify(payload)
+  });
+}
+
+export function listEngineeringRequests(filters: {
+  status?: EngineeringRequestStatus | "";
+  request_type?: EngineeringRequestType | "";
+  repository_id?: string;
+} = {}): Promise<EngineeringRequestListItem[]> {
+  const params = new URLSearchParams();
+  if (filters.status) {
+    params.set("status", filters.status);
+  }
+  if (filters.request_type) {
+    params.set("request_type", filters.request_type);
+  }
+  if (filters.repository_id) {
+    params.set("repository_id", filters.repository_id);
+  }
+  const query = params.toString();
+  return apiFetch<EngineeringRequestListItem[]>(`/engineering-requests${query ? `?${query}` : ""}`);
+}
+
+export function getEngineeringRequest(requestId: string): Promise<EngineeringRequestDetail> {
+  return apiFetch<EngineeringRequestDetail>(`/engineering-requests/${requestId}`);
+}
+
+export function createEngineeringRequest(
+  payload: CreateEngineeringRequestPayload
+): Promise<EngineeringRequestDetail> {
+  return apiFetch<EngineeringRequestDetail>("/engineering-requests", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function analyzeEngineeringRequest(requestId: string): Promise<EngineeringRequestDetail> {
+  return apiFetch<EngineeringRequestDetail>(`/engineering-requests/${requestId}/analyze`, {
+    method: "POST"
+  });
+}
+
+export function approveEngineeringRequestPlan(requestId: string): Promise<EngineeringRequestDetail> {
+  return apiFetch<EngineeringRequestDetail>(`/engineering-requests/${requestId}/approve-plan`, {
+    method: "POST"
+  });
+}
+
+export function rejectEngineeringRequestPlan(
+  requestId: string,
+  reason?: string
+): Promise<EngineeringRequestDetail> {
+  return apiFetch<EngineeringRequestDetail>(`/engineering-requests/${requestId}/reject-plan`, {
+    method: "POST",
+    body: JSON.stringify({ reason: reason ?? null })
   });
 }

@@ -24,6 +24,11 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     company_rules = relationship("CompanyRule", back_populates="organization", cascade="all, delete-orphan")
     architecture_rules = relationship("ArchitectureRule", back_populates="organization", cascade="all, delete-orphan")
     scans = relationship("PullRequestScan", back_populates="organization", cascade="all, delete-orphan")
+    engineering_requests = relationship(
+        "EngineeringRequest",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+    )
     audit_logs = relationship("AuditLog", back_populates="organization", cascade="all, delete-orphan")
     settings = relationship("AdminSetting", back_populates="organization", cascade="all, delete-orphan")
 

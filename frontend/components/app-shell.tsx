@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import clsx from "clsx";
-import { GitBranch, LayoutDashboard, ListChecks, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Bot, GitBranch, LayoutDashboard, ListChecks, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 const navigation = [
@@ -13,6 +13,7 @@ const navigation = [
   { href: "/repositories", label: "Repositories", icon: GitBranch },
   { href: "/scans", label: "Scans", icon: ListChecks },
   { href: "/rules", label: "Rules", icon: ShieldCheck },
+  { href: "/engineering-requests", label: "Engineering", icon: Bot },
   { href: "/admin/dead-letter-scans", label: "Dead letters", icon: ShieldAlert }
 ];
 

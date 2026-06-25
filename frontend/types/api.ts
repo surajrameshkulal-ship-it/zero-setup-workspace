@@ -156,3 +156,72 @@ export type DeadLetterScan = {
   failed_at: string;
   retry_count: number;
 };
+
+export type EngineeringRequestType =
+  | "bug"
+  | "feature"
+  | "refactor"
+  | "docs"
+  | "security"
+  | "performance"
+  | "other";
+
+export type EngineeringRequestStatus =
+  | "submitted"
+  | "analyzing"
+  | "plan_ready"
+  | "approved"
+  | "rejected"
+  | "in_progress"
+  | "pr_opened"
+  | "completed"
+  | "failed";
+
+export type EngineeringRequestPriority = "low" | "medium" | "high" | "urgent";
+
+export type AffectedFile = {
+  path: string;
+  reason?: string;
+};
+
+export type EngineeringSafetyNotes = {
+  allowed?: string[];
+  forbidden?: string[];
+  notes?: string[];
+  human_approval_required?: boolean;
+  ai_available?: boolean;
+  rejection_reason?: string;
+  [key: string]: unknown;
+};
+
+export type EngineeringRequestListItem = {
+  id: string;
+  repository_id: string | null;
+  repository_full_name: string | null;
+  title: string;
+  request_type: EngineeringRequestType;
+  status: EngineeringRequestStatus;
+  priority: EngineeringRequestPriority;
+  risk_level: RiskLevel | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EngineeringRequestDetail = EngineeringRequestListItem & {
+  organization_id: string;
+  created_by_user_id: string | null;
+  description: string;
+  ai_summary: string | null;
+  affected_files: AffectedFile[];
+  implementation_plan: string[];
+  test_plan: string[];
+  safety_notes: EngineeringSafetyNotes;
+};
+
+export type CreateEngineeringRequestPayload = {
+  title: string;
+  description: string;
+  request_type: EngineeringRequestType;
+  priority: EngineeringRequestPriority;
+  repository_id?: string | null;
+};
