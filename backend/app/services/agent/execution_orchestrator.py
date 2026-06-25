@@ -207,11 +207,20 @@ class ExecutionOrchestrator:
         ctx.rollback_snapshot = result.rollback_snapshot
 
     def _run_validate(self, ctx: _Context) -> None:
+        validator = ctx.validator
+        # When no validator is injected, run REAL validation inside the workspace.
+        if validator is None and ctx.handle is not None and ctx.handle.path:
+            from app.services.agent.validation_runner import ValidationRunner, build_runner_validator
+
+            runner = ValidationRunner(
+                ctx.handle.path, db=self.db, organization_id=ctx.organization_id
+            )
+            validator = build_runner_validator(runner)
         run = ValidationService(self.db).run(
             engineering_request_id=ctx.request.id,
             organization_id=ctx.organization_id,
             actor_user_id=ctx.actor_user_id,
-            validator=ctx.validator,
+            validator=validator,
             auto_fixer=ctx.auto_fixer,
         )
         if run.status != "passed":

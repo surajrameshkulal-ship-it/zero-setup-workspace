@@ -360,6 +360,51 @@ def test_idempotent_completed_run(api_context, monkeypatch, tmp_path) -> None:
     assert second.attempts == 1
 
 
+def test_orchestrator_uses_real_validation_runner(api_context, monkeypatch, tmp_path) -> None:
+    from types import SimpleNamespace
+
+    from app.services.agent import validation_runner as vr_module
+    from app.services.agent.validation_runner import CommandResult, ValidationRunner
+
+    request = _approved_request(api_context, monkeypatch, connect=True)
+    orch = _orchestrator(api_context, tmp_path)
+
+    workdir = tmp_path / "real-ws"
+    workdir.mkdir()
+
+    def fake_materialize(self, ctx):
+        ctx.materialization = SimpleNamespace(
+            materialized=True,
+            workspace_path=str(workdir),
+            target_branch="codedna/ai/feature-x",
+            default_branch="main",
+            language_hints=[],
+        )
+        ctx.handle = self._handle_from(str(workdir), "codedna/ai/feature-x", "main")
+
+    monkeypatch.setattr(ExecutionOrchestrator, "_run_materialize", fake_materialize)
+    monkeypatch.setattr(ExecutionOrchestrator, "_run_generate", lambda self, ctx: None)
+    monkeypatch.setattr(ExecutionOrchestrator, "_run_apply", lambda self, ctx: None)
+
+    called = {"runner": False}
+
+    def fake_run(self, commands=None):
+        called["runner"] = True
+        return [CommandResult("pytest", "python -m pytest", "passed", 0, 1.0, "", "", None)]
+
+    monkeypatch.setattr(ValidationRunner, "run", fake_run)
+
+    run = orch.execute(
+        engineering_request_id=request.id,
+        organization_id=api_context.organization.id,
+        actor_user_id=api_context.user.id,
+        # No validator injected -> orchestrator must build the real ValidationRunner.
+    )
+    assert called["runner"] is True
+    assert run.status == "completed"
+    assert run.draft_pull_request_id is not None
+
+
 def test_requires_approved_request(api_context, monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(EngineeringPlanningService, "_call_ai", lambda self, prompt: None)
     created = api_context.client.post(

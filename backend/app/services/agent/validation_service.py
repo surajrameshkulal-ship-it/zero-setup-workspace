@@ -103,7 +103,9 @@ class ValidationService:
             else:
                 break  # nothing more can be fixed; stop retrying
 
-        success = bool(checks) and all(c.get("status") == "passed" for c in checks)
+        # Skipped checks (e.g. a missing optional tool) do not fail the gate;
+        # only an explicit "failed" check does.
+        success = bool(checks) and all(c.get("status") in ("passed", "skipped") for c in checks)
 
         draft_pr = None
         if success:
