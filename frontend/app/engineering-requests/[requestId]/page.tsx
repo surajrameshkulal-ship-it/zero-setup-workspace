@@ -466,58 +466,107 @@ export default function EngineeringRequestDetailPage({
               </div>
               <button
                 type="button"
-                disabled={(!isApproved && !codePreview) || busy !== null}
+                disabled={(!executionPlan && !codePreview) || busy !== null}
                 onClick={() => run("codegen", () => generateCodePreview(request.id))}
                 className="focus-ring inline-flex items-center gap-2 rounded border border-line bg-panel px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-mist disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Play className="h-4 w-4" aria-hidden="true" />
-                {busy === "codegen" ? "Generating" : codePreview ? "Regenerate preview" : "Generate preview"}
+                {busy === "codegen" ? "Generating" : codePreview ? "Regenerate Code Preview" : "Generate Code Preview"}
               </button>
             </div>
             <p className="mt-2 text-xs text-slate-500">
               Preview only. No files are written, committed, pushed, branched, or turned into a PR.
-              {isApproved || codePreview ? null : " Approve the plan first to enable preview."}
+              {executionPlan || codePreview ? null : " Generate the execution plan first to enable."}
             </p>
+            {actionError && busy === null ? (
+              <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{actionError}</div>
+            ) : null}
           </section>
 
           {codePreview ? (
-            <>
-              <Section title="Proposed changes">
-                {codePreview.summary ? <p className="text-sm text-slate-700">{codePreview.summary}</p> : null}
-                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-                  <div>
-                    <dt className="text-slate-500">Files</dt>
-                    <dd className="text-lg font-semibold text-ink">{codePreview.estimated_changes?.files ?? 0}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-slate-500">Est. additions</dt>
-                    <dd className="text-lg font-semibold text-emerald-700">
-                      +{codePreview.estimated_changes?.estimated_additions ?? 0}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-slate-500">Est. deletions</dt>
-                    <dd className="text-lg font-semibold text-rose-700">
-                      -{codePreview.estimated_changes?.estimated_deletions ?? 0}
-                    </dd>
-                  </div>
-                </dl>
-                {codePreview.affected_files.length > 0 ? (
-                  <ul className="mt-3 space-y-1 text-sm">
-                    {codePreview.affected_files.map((file, index) => (
-                      <li key={index} className="flex items-center gap-2 font-mono text-slate-700">
-                        <span className="inline-flex rounded border border-line bg-mist px-1.5 text-xs text-slate-600">
-                          {file.change_type}
-                        </span>
-                        {file.path}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <p className="mt-2 text-xs text-slate-400">
-                  {codePreview.ai_available ? "Generated with AI." : "AI unavailable — illustrative fallback."}
-                </p>
-              </Section>
+            (() => {
+              const filesByType = (type: string) =>
+                codePreview.affected_files.filter((f) => f.change_type === type).map((f) => f.path);
+              const created = filesByType("create");
+              const modified = filesByType("modify");
+              const deleted = filesByType("delete");
+              const estLines =
+                (codePreview.estimated_changes?.estimated_additions ?? 0) +
+                (codePreview.estimated_changes?.estimated_deletions ?? 0);
+              return (
+                <>
+                  <Section title="Proposed changes">
+                    {codePreview.summary ? <p className="text-sm text-slate-700">{codePreview.summary}</p> : null}
+                    <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-4">
+                      <div>
+                        <dt className="text-slate-500">Files</dt>
+                        <dd className="text-lg font-semibold text-ink">{codePreview.affected_files.length}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">Est. lines changed</dt>
+                        <dd className="text-lg font-semibold text-ink">{estLines}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">Est. additions</dt>
+                        <dd className="text-lg font-semibold text-emerald-700">
+                          +{codePreview.estimated_changes?.estimated_additions ?? 0}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">Est. deletions</dt>
+                        <dd className="text-lg font-semibold text-rose-700">
+                          -{codePreview.estimated_changes?.estimated_deletions ?? 0}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="mt-4 grid gap-4 md:grid-cols-3">
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-[0.08em] text-emerald-700">
+                          Files to create
+                        </div>
+                        {created.length === 0 ? (
+                          <p className="mt-1 text-sm text-slate-400">None</p>
+                        ) : (
+                          <ul className="mt-1 space-y-0.5 font-mono text-xs text-slate-700">
+                            {created.map((p) => (
+                              <li key={p}>{p}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-[0.08em] text-amber-700">
+                          Files to modify
+                        </div>
+                        {modified.length === 0 ? (
+                          <p className="mt-1 text-sm text-slate-400">None</p>
+                        ) : (
+                          <ul className="mt-1 space-y-0.5 font-mono text-xs text-slate-700">
+                            {modified.map((p) => (
+                              <li key={p}>{p}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-[0.08em] text-rose-700">
+                          Files to delete
+                        </div>
+                        {deleted.length === 0 ? (
+                          <p className="mt-1 text-sm text-slate-400">None</p>
+                        ) : (
+                          <ul className="mt-1 space-y-0.5 font-mono text-xs text-slate-700">
+                            {deleted.map((p) => (
+                              <li key={p}>{p}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-slate-400">
+                      {codePreview.ai_available ? "Generated with AI." : "AI unavailable — illustrative fallback."}
+                    </p>
+                  </Section>
 
               <Section title="Diff preview (illustrative — not applied)">
                 <pre className="overflow-x-auto rounded border border-line bg-mist p-3 text-xs leading-5 text-slate-800">
@@ -536,7 +585,9 @@ export default function EngineeringRequestDetailPage({
                   <BulletList items={codePreview.documentation_updates} empty="None." />
                 </Section>
               </div>
-            </>
+                </>
+              );
+            })()
           ) : null}
 
           {/* Autonomous validation (Phase 9 Step 6) — on success prepares a draft PR */}
@@ -629,12 +680,12 @@ export default function EngineeringRequestDetailPage({
                 {draftPr && !draftPr.is_pushed ? (
                   <button
                     type="button"
-                    disabled={busy !== null}
+                    disabled={busy !== null || validation?.status === "failed"}
                     onClick={() => run("github_pr", () => createGithubDraftPullRequest(request.id))}
                     className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#125870] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <GitPullRequest className="h-4 w-4" aria-hidden="true" />
-                    {busy === "github_pr" ? "Creating" : "Create draft PR on GitHub"}
+                    {busy === "github_pr" ? "Creating" : "Create Draft PR on GitHub"}
                   </button>
                 ) : null}
               </div>
@@ -644,6 +695,9 @@ export default function EngineeringRequestDetailPage({
               codedna/ai branch — never merged or deployed, and human review is required.
               {isApproved || draftPr ? null : " Approve the plan first to enable."}
             </p>
+            {actionError && busy === null ? (
+              <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{actionError}</div>
+            ) : null}
             {draftPr?.is_pushed && draftPr.github_pr_url ? (
               <div className="mt-3 flex flex-wrap items-center gap-3 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm">
                 <a
