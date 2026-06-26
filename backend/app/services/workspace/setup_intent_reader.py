@@ -21,7 +21,7 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import NotFoundError
+from app.core.errors import IntegrationError, NotFoundError
 from app.integrations.github import GitHubIntegration
 from app.models.github import GitHubInstallation
 from app.models.repository import Repository
@@ -368,9 +368,14 @@ class SetupIntentReader:
 
     @staticmethod
     def _notes(files: dict[str, str]) -> list[str]:
+        present = {k.split("/")[-1].lower() for k in files}
+        missing = [name for name in MANIFEST_FILES if name.lower() not in present]
         if not files:
             return ["No manifest files were available for analysis."]
-        return [f"Analyzed {len(files)} manifest file(s); inference is read-only and code was never executed."]
+        notes = [f"Analyzed {len(files)} manifest file(s); inference is read-only and code was never executed."]
+        if missing:
+            notes.append("Optional manifests not present: " + ", ".join(missing) + ".")
+        return notes
 
     @staticmethod
     def _confidence(fields: dict) -> float:
@@ -404,26 +409,48 @@ class GitHubManifestFileProvider:
         self.gh = integration or GitHubIntegration()
 
     def __call__(self, repository: Repository) -> dict[str, str]:
+        # Fatal: the repository must be connected to a GitHub installation.
         if repository.github_installation_id is None:
-            return {}
+            raise IntegrationError("Repository is not connected to a GitHub installation.")
         installation = self.db.get(GitHubInstallation, repository.github_installation_id)
         if installation is None:
-            return {}
+            raise IntegrationError("GitHub installation is missing for this repository.")
+
+        # Fatal: token retrieval (invalid App credentials/installation) propagates.
         token = self.gh.get_installation_token(installation.installation_id)
         ref = repository.default_branch or "main"
+
+        # Fatal: one repo-level call distinguishes "repo inaccessible" from
+        # "file missing". If we can read the default branch, per-file 404s are
+        # simply optional manifests that don't exist.
+        try:
+            self.gh.get_branch_sha(token=token, owner=repository.owner, repo=repository.name, branch=ref)
+        except IntegrationError as exc:
+            raise IntegrationError(
+                f"Unable to access repository '{repository.full_name}' on GitHub. "
+                "Check that the GitHub App is installed and has repository read access."
+            ) from exc
+
         files: dict[str, str] = {}
         for path in MANIFEST_FILES:
-            content = self.gh.get_file_content(
-                token=token, owner=repository.owner, repo=repository.name, path=path, ref=ref
-            )
+            content = self._safe_get(token, repository, path, ref)
             if content is not None:
                 files[path] = content
+        # Workflow listing already tolerates a missing directory.
         for workflow_path in self.gh.list_directory(
             token=token, owner=repository.owner, repo=repository.name, path=".github/workflows", ref=ref
         ):
-            content = self.gh.get_file_content(
-                token=token, owner=repository.owner, repo=repository.name, path=workflow_path, ref=ref
-            )
+            content = self._safe_get(token, repository, workflow_path, ref)
             if content is not None:
                 files[workflow_path] = content
         return files
+
+    def _safe_get(self, token: str, repository: Repository, path: str, ref: str) -> str | None:
+        """Fetch one optional manifest; a 404 (missing file) is not fatal."""
+        try:
+            return self.gh.get_file_content(
+                token=token, owner=repository.owner, repo=repository.name, path=path, ref=ref
+            )
+        except IntegrationError:
+            logger.info("setup_intent_manifest_missing", extra={"repository": repository.full_name, "path": path})
+            return None

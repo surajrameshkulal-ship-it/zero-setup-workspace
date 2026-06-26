@@ -163,6 +163,116 @@ def test_api_get_after_generation_and_404(api_context) -> None:
     assert body["repository_full_name"] == "acme/payments-api"
 
 
+class _FakeGitHub:
+    def __init__(self, *, files: dict[str, str], token_error=False, repo_error=False) -> None:
+        self._files = files
+        self._token_error = token_error
+        self._repo_error = repo_error
+
+    def get_installation_token(self, installation_id):
+        from app.core.errors import IntegrationError
+
+        if self._token_error:
+            raise IntegrationError("bad token")
+        return "tok"
+
+    def get_branch_sha(self, **kwargs):
+        from app.core.errors import IntegrationError
+
+        if self._repo_error:
+            raise IntegrationError("repo 404")
+        return "sha123"
+
+    def get_file_content(self, *, token, owner, repo, path, ref):
+        from app.core.errors import IntegrationError
+
+        if path in self._files:
+            return self._files[path]
+        raise IntegrationError(f"GitHub API request failed with status 404 for {path}")
+
+    def list_directory(self, **kwargs):
+        return []
+
+
+def _connected_repo(api_context):
+    from app.models.github import GitHubInstallation
+
+    inst = GitHubInstallation(
+        organization_id=api_context.organization.id,
+        installation_id=4242,
+        account_login="acme-labs",
+        account_type="Organization",
+        permissions={},
+    )
+    api_context.db.add(inst)
+    api_context.db.flush()
+    api_context.repository.github_installation_id = inst.id
+    api_context.db.commit()
+
+
+def test_provider_tolerates_missing_package_json(api_context) -> None:
+    from app.services.workspace.setup_intent_reader import GitHubManifestFileProvider
+
+    _connected_repo(api_context)
+    gh = _FakeGitHub(files={"README.md": "# project\nrun with flask\n"})  # package.json etc. 404
+    provider = GitHubManifestFileProvider(api_context.db, integration=gh)
+    files = provider(api_context.repository)
+    assert "README.md" in files
+    assert "package.json" not in files  # missing, not fatal
+
+
+def test_generate_succeeds_with_only_readme(api_context) -> None:
+    from app.services.workspace.setup_intent_reader import GitHubManifestFileProvider
+
+    _connected_repo(api_context)
+    gh = _FakeGitHub(files={"README.md": "# demo\n"})
+    intent = _reader(api_context).generate(
+        repository_id=api_context.repository.id,
+        organization_id=api_context.organization.id,
+        actor_user_id=api_context.user.id,
+        file_provider=GitHubManifestFileProvider(api_context.db, integration=gh),
+    )
+    assert intent.sources_analyzed == ["README.md"]
+    assert any("not present" in n for n in intent.notes)
+
+
+def test_generate_succeeds_with_multiple_missing_manifests(api_context) -> None:
+    from app.services.workspace.setup_intent_reader import GitHubManifestFileProvider
+
+    _connected_repo(api_context)
+    gh = _FakeGitHub(files={"README.md": "# x\n", "Dockerfile": "FROM python:3.12\nEXPOSE 8000\n"})
+    intent = _reader(api_context).generate(
+        repository_id=api_context.repository.id,
+        organization_id=api_context.organization.id,
+        actor_user_id=api_context.user.id,
+        file_provider=GitHubManifestFileProvider(api_context.db, integration=gh),
+    )
+    assert intent.docker["present"] is True
+    assert 8000 in intent.ports
+    assert intent.confidence_score < 0.6  # partial confidence, but no error
+
+
+def test_provider_fails_on_repo_inaccessible(api_context) -> None:
+    from app.core.errors import IntegrationError
+    from app.services.workspace.setup_intent_reader import GitHubManifestFileProvider
+
+    _connected_repo(api_context)
+    gh = _FakeGitHub(files={"README.md": "x"}, repo_error=True)
+    with pytest.raises(IntegrationError) as exc:
+        GitHubManifestFileProvider(api_context.db, integration=gh)(api_context.repository)
+    assert "unable to access repository" in str(exc.value).lower()
+
+
+def test_provider_fails_on_token_error(api_context) -> None:
+    from app.core.errors import IntegrationError
+    from app.services.workspace.setup_intent_reader import GitHubManifestFileProvider
+
+    _connected_repo(api_context)
+    gh = _FakeGitHub(files={"README.md": "x"}, token_error=True)
+    with pytest.raises(IntegrationError):
+        GitHubManifestFileProvider(api_context.db, integration=gh)(api_context.repository)
+
+
 def test_org_isolation(api_context) -> None:
     # GET and POST for another org's repository are not found.
     assert api_context.client.get(f"{REPO_BASE}/{api_context.other_repository.id}/setup-intent").status_code == 404
