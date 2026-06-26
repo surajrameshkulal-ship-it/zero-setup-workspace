@@ -191,25 +191,14 @@ def create_github_draft_pull_request(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DraftPullRequest:
-    """Human-initiated: run the real pipeline and open a real GitHub draft PR.
+    """Human-initiated: open a real GitHub draft PR once validation has passed.
 
-    Runs the execution pipeline (real read-only checkout via the GitHub App
-    token, AI code generation, safe workspace apply, validation, self-healing),
-    then pushes the generated changes to a safe codedna/ai/... branch and opens
-    a draft PR. Refuses to push to protected branches, on failed validation, or
-    with forbidden files; never merges or deploys.
+    Gated by the passed ValidationRun. Materializes the repo (real read-only
+    checkout via the GitHub App token), generates and applies the changes in an
+    isolated workspace, pushes them to a safe codedna/ai/... branch, and opens a
+    draft PR. Refuses on unpassed validation, protected branches, or forbidden
+    files; never merges or deploys.
     """
-    from app.services.agent.execution_orchestrator import ExecutionOrchestrator
-    from app.services.agent.github_source_provider import GitHubTarballSourceProvider
-
-    # Run (or resume) the real pipeline so a validated workspace with real
-    # changes exists before we push. Idempotent: a completed run is reused.
-    ExecutionOrchestrator(db).execute(
-        engineering_request_id=request_id,
-        organization_id=current_user.organization_id,
-        actor_user_id=current_user.id,
-        source_provider=GitHubTarballSourceProvider(db),
-    )
     return GitHubDraftPRCreator(db).create(
         engineering_request_id=request_id,
         organization_id=current_user.organization_id,

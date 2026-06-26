@@ -1,12 +1,13 @@
 """Real GitHub Draft PR Creator (Phase 10, Step 8).
 
-After validation (and any self-healing) succeeds, this service pushes the
-validated workspace changes to a safe `codedna/ai/...` branch and opens a real
-**draft** pull request on GitHub. Human approval remains mandatory.
+After validation passes, this service materializes the repository, generates and
+applies the changes inside an isolated workspace, pushes them to a safe
+`codedna/ai/...` branch, and opens a real **draft** pull request on GitHub.
 
-It NEVER merges, deploys, pushes to the default/protected branch, bypasses
-approval, modifies secrets, or pushes when validation failed. Duplicate PRs are
-prevented (idempotent per execution).
+The validation gate is the passed `ValidationRun` produced by the validation
+step (NOT a separate ExecutionRun). It NEVER merges, deploys, pushes to the
+default/protected branch, bypasses validation, modifies secrets, or pushes when
+validation has not passed. Duplicate PRs are prevented (idempotent).
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
@@ -25,9 +26,9 @@ from app.core.errors import AppError, NotFoundError
 from app.integrations.github import GitHubIntegration
 from app.models.draft_pull_request import DraftPullRequest
 from app.models.engineering_request import EngineeringRequest, RequestStatus
-from app.models.execution_run import ExecutionRun
-from app.models.repository import Repository
 from app.models.github import GitHubInstallation
+from app.models.repository import Repository
+from app.models.validation_run import ValidationRun
 from app.services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
@@ -36,19 +37,14 @@ PROTECTED_BRANCHES = {"main", "master", "develop", "release", "production"}
 FORBIDDEN_FILE = re.compile(r"(^|/)\.env|(^|/)\.git/|secret|credential|\.pem$|\.key$|id_rsa")
 SAFE_BRANCH_PREFIX = "codedna/ai/"
 
+# Builds the real change set: returns (files=[(path, content)], deletions=[path]).
+ChangeBuilder = Callable[..., tuple[list[tuple[str, str]], list[str]]]
+
 
 class DraftPRClient(Protocol):
     def push_branch(
-        self,
-        *,
-        owner: str,
-        repo: str,
-        installation_id: int,
-        branch: str,
-        base_branch: str,
-        files: list[tuple[str, str]],
-        deletions: list[str],
-        message: str,
+        self, *, owner: str, repo: str, installation_id: int, branch: str, base_branch: str,
+        files: list[tuple[str, str]], deletions: list[str], message: str,
     ) -> dict: ...
 
     def open_draft_pull_request(
@@ -103,10 +99,19 @@ class DefaultDraftPRClient:
 
 
 class GitHubDraftPRCreator:
-    def __init__(self, db: Session, *, client: DraftPRClient | None = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        client: DraftPRClient | None = None,
+        change_builder: ChangeBuilder | None = None,
+        workspace_manager=None,
+    ) -> None:
         self.db = db
         self.audit = AuditService(db)
         self.client = client or DefaultDraftPRClient()
+        self.change_builder = change_builder or self._default_build_changes
+        self.workspace_manager = workspace_manager
 
     def create(
         self,
@@ -123,27 +128,45 @@ class GitHubDraftPRCreator:
             )
         )
         if draft is None:
-            raise NotFoundError("Draft pull request metadata not found; run the pipeline first.")
+            raise NotFoundError("Draft pull request metadata not found; prepare the draft first.")
 
-        # Idempotency: never create a duplicate PR for the same execution.
+        # Idempotency: never create a duplicate PR.
         if draft.is_pushed and draft.github_pr_url:
             self._audit(organization_id, actor_user_id, "draft_pr_creation_skipped", request, {"reason": "already_created"})
             return draft
 
-        run = self.db.scalar(
-            select(ExecutionRun).where(
-                ExecutionRun.engineering_request_id == request.id,
-                ExecutionRun.organization_id == organization_id,
+        validation = self.db.scalar(
+            select(ValidationRun).where(
+                ValidationRun.engineering_request_id == request.id,
+                ValidationRun.organization_id == organization_id,
             )
+        )
+        # Diagnostic logging before any refusal (validation state the gate sees).
+        logger.info(
+            "draft_pr_precondition_check",
+            extra={
+                "request_id": str(request.id),
+                "validation_run_id": str(validation.id) if validation else None,
+                "validation_status": validation.status if validation else None,
+                "draft_branch": draft.branch_name,
+                "draft_is_pushed": draft.is_pushed,
+            },
         )
 
         self._audit(organization_id, actor_user_id, "draft_pr_creation_started", request, {})
         logger.info("draft_pr_creation_started", extra={"request_id": str(request.id)})
         try:
-            repository, installation = self._validate_preconditions(request, draft, run, organization_id)
+            repository, installation = self._validate_preconditions(request, draft, validation)
 
-            files, deletions = self._collect_changes(run, draft)
+            files, deletions = self.change_builder(
+                request=request,
+                draft=draft,
+                organization_id=organization_id,
+                actor_user_id=actor_user_id,
+            )
             self._reject_forbidden(files, deletions)
+            if not files and not deletions:
+                raise AppError("Refusing: no changes were produced to push.")
 
             push = self.client.push_branch(
                 owner=repository.owner,
@@ -157,10 +180,10 @@ class GitHubDraftPRCreator:
             )
             self._audit(
                 organization_id, actor_user_id, "draft_pr_branch_pushed", request,
-                {"branch": draft.branch_name, "base": draft.base_branch},
+                {"branch": draft.branch_name, "base": draft.base_branch, "files": len(files)},
             )
 
-            body = self._pr_body(draft, run)
+            body = self._pr_body(draft, validation)
             pr = self.client.open_draft_pull_request(
                 owner=repository.owner,
                 repo=repository.name,
@@ -186,7 +209,6 @@ class GitHubDraftPRCreator:
             logger.info("draft_pr_created", extra={"request_id": str(request.id), "pr": draft.github_pr_url})
             return draft
         except AppError:
-            self._audit(organization_id, actor_user_id, "draft_pr_creation_skipped", request, {})
             self.db.commit()
             raise
         except Exception as exc:  # noqa: BLE001
@@ -197,14 +219,20 @@ class GitHubDraftPRCreator:
 
     # -- preconditions ---------------------------------------------------------
 
-    def _validate_preconditions(self, request, draft, run, organization_id) -> tuple[Repository, GitHubInstallation]:
+    def _validate_preconditions(
+        self, request, draft, validation: ValidationRun | None
+    ) -> tuple[Repository, GitHubInstallation]:
         if request.status != RequestStatus.APPROVED:
             raise AppError("Refusing: engineering request is not approved.")
-        if run is None or run.status != "completed":
-            raise AppError("Refusing: execution validation has not passed.")
-        healing = (run.report or {}).get("healing")
-        if healing is not None and healing.get("status") not in ("healed",):
-            raise AppError("Refusing: self-healing did not succeed.")
+
+        # Validation gate: the ValidationRun produced by the validation step must have passed.
+        if validation is None or validation.status != "passed":
+            status = validation.status if validation else "none"
+            self._audit_skip(request, f"validation_not_passed:{status}")
+            raise AppError(
+                f"Refusing: validation has not passed (validation status: {status}). "
+                "Run validation successfully before creating the pull request."
+            )
 
         branch = (draft.branch_name or "").strip()
         default_branch = (draft.base_branch or "").strip().lower()
@@ -221,54 +249,80 @@ class GitHubDraftPRCreator:
         installation = self.db.get(GitHubInstallation, repository.github_installation_id)
         if installation is None:
             raise AppError("Refusing: GitHub installation is missing.")
-
-        if run.workspace_path and not Path(run.workspace_path).is_dir():
-            raise AppError("Refusing: workspace is invalid.")
         return repository, installation
 
-    def _collect_changes(self, run: ExecutionRun, draft: DraftPullRequest) -> tuple[list[tuple[str, str]], list[str]]:
-        plan = run.code_plan or {} if run else {}
-        modify = list(plan.get("files_to_modify", []))
-        create = list(plan.get("files_to_create", []))
-        delete = list(plan.get("files_to_delete", []))
-        # Include any files touched during self-healing iterations.
-        for iteration in ((run.report or {}).get("healing") or {}).get("iterations", []) if run else []:
-            modify.extend(iteration.get("files_changed", []))
+    # -- default real change builder (materialize -> generate -> apply) --------
 
-        workspace = Path(run.workspace_path) if run and run.workspace_path else None
+    def _default_build_changes(
+        self, *, request, draft, organization_id, actor_user_id
+    ) -> tuple[list[tuple[str, str]], list[str]]:
+        from app.services.agent.code_generation_engine import CodeGenerationEngine
+        from app.services.agent.github_source_provider import GitHubTarballSourceProvider
+        from app.services.agent.safe_change_applier import SafeChangeApplier
+        from app.services.workspace.repository_materializer import RepositoryMaterializer
+        from app.services.workspace.secure_workspace_manager import SecureWorkspaceManager, WorkspaceHandle
+
+        wm = self.workspace_manager or SecureWorkspaceManager(db=self.db)
+
+        snapshot = RepositoryMaterializer(self.db, workspace_manager=wm).materialize(
+            repository_id=request.repository_id,
+            organization_id=organization_id,
+            actor_user_id=actor_user_id,
+            target_branch=draft.branch_name,
+            source_provider=GitHubTarballSourceProvider(self.db),
+        )
+        if not snapshot.materialized:
+            raise AppError(f"Refusing: repository could not be materialized ({snapshot.reason}).")
+
+        plan = CodeGenerationEngine(self.db).generate(
+            engineering_request_id=request.id,
+            organization_id=organization_id,
+            actor_user_id=actor_user_id,
+            materialization=snapshot,
+        )
+
+        handle = WorkspaceHandle(
+            workspace_id="draftpr",
+            path=snapshot.workspace_path,
+            branch_name=snapshot.target_branch,
+            base_branch=snapshot.default_branch,
+            max_bytes=wm.max_bytes,
+        )
+        applier = SafeChangeApplier(workspace_manager=wm, handle=handle, db=self.db)
+        applier.apply(
+            plan.changes, dry_run=False, organization_id=organization_id, actor_user_id=actor_user_id
+        )
+
+        workspace = Path(snapshot.workspace_path)
         files: list[tuple[str, str]] = []
-        seen: set[str] = set()
-        for rel in create + modify:
-            if rel in seen or rel in delete:
-                continue
-            seen.add(rel)
-            if workspace is None:
+        for rel in list(dict.fromkeys(plan.files_to_create + plan.files_to_modify)):
+            if rel in plan.files_to_delete:
                 continue
             abs_path = workspace / rel
             if abs_path.is_file():
                 files.append((rel, abs_path.read_text(encoding="utf-8", errors="replace")))
-        return files, [d for d in delete if d]
+        return files, [d for d in plan.files_to_delete if d]
+
+    # -- helpers ---------------------------------------------------------------
 
     def _reject_forbidden(self, files: list[tuple[str, str]], deletions: list[str]) -> None:
         for path in [p for p, _ in files] + deletions:
             if FORBIDDEN_FILE.search(path.lower()):
                 raise AppError(f"Refusing: change set includes a protected/secret file ({path}).")
 
-    def _pr_body(self, draft: DraftPullRequest, run: ExecutionRun | None) -> str:
-        report = (run.report if run else {}) or {}
-        healing = report.get("healing") or {}
+    def _pr_body(self, draft: DraftPullRequest, validation: ValidationRun | None) -> str:
+        report = (validation.report if validation else {}) or {}
         lines = [
             draft.body or "",
             "",
             "---",
-            "### Execution report",
-            f"- Validation: passed",
-            f"- Self-healing: {healing.get('status', 'not needed')}"
-            + (f" ({healing.get('fixes_applied', 0)} fix(es))" if healing else ""),
-            f"- Workspace branch: `{draft.branch_name}` → `{draft.base_branch}`",
+            "### Validation",
+            f"- Status: {validation.status if validation else 'unknown'}",
+            f"- Passed checks: {', '.join(report.get('passed', [])) or 'n/a'}",
+            f"- Branch: `{draft.branch_name}` → `{draft.base_branch}`",
             "",
             "> 🔒 **Human review required.** This draft PR was prepared by CodeDNA AI "
-            "after passing validation. It has NOT been merged or deployed.",
+            "after validation passed. It has NOT been merged or deployed.",
         ]
         return "\n".join(lines)
 
@@ -294,3 +348,6 @@ class GitHubDraftPRCreator:
             target_id=str(request.id),
             metadata=metadata,
         )
+
+    def _audit_skip(self, request, reason: str) -> None:
+        logger.warning("draft_pr_creation_skipped", extra={"request_id": str(request.id), "reason": reason})

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import uuid
-from pathlib import Path
 
 import pytest
 
 from app.core.errors import AppError, NotFoundError
 from app.models.audit import AuditLog
 from app.models.draft_pull_request import DraftPullRequest
-from app.models.execution_run import ExecutionRun
+from app.models.github import GitHubInstallation
+from app.models.validation_run import ValidationRun
 from app.services.agent.github_draft_pr_creator import GitHubDraftPRCreator
 from app.services.engineering_planning_service import EngineeringPlanningService
 
@@ -28,6 +28,12 @@ class FakeClient:
     def open_draft_pull_request(self, **kwargs):
         self.pr = kwargs
         return {"number": 42, "html_url": "https://github.com/acme-labs/payments-api/pull/42"}
+
+
+def _builder(files, deletions=None):
+    def build(*, request, draft, organization_id, actor_user_id):
+        return list(files), list(deletions or [])
+    return build
 
 
 def _approved_request(api_context, monkeypatch, *, connect: bool = True) -> str:
@@ -52,36 +58,21 @@ def _approved_request(api_context, monkeypatch, *, connect: bool = True) -> str:
     api_context.client.post(f"{BASE}/{created['id']}/analyze")
     api_context.client.post(f"{BASE}/{created['id']}/approve-plan")
     if connect:
-        api_context.repository.github_installation_id = _make_installation(api_context)
+        inst = GitHubInstallation(
+            organization_id=api_context.organization.id,
+            installation_id=556677,
+            account_login="acme-labs",
+            account_type="Organization",
+            permissions={},
+        )
+        api_context.db.add(inst)
+        api_context.db.flush()
+        api_context.repository.github_installation_id = inst.id
         api_context.db.commit()
     return created["id"]
 
 
-def _make_installation(api_context):
-    from app.models.github import GitHubInstallation
-
-    inst = GitHubInstallation(
-        organization_id=api_context.organization.id,
-        installation_id=556677,
-        account_login="acme-labs",
-        account_type="Organization",
-        permissions={},
-    )
-    api_context.db.add(inst)
-    api_context.db.flush()
-    return inst.id
-
-
-def _draft_and_run(
-    api_context,
-    request_id: str,
-    *,
-    branch="codedna/ai/feature-abc",
-    base="main",
-    run_status="completed",
-    workspace: Path | None = None,
-    files_to_create=None,
-) -> tuple[DraftPullRequest, ExecutionRun]:
+def _draft(api_context, request_id: str, *, branch="codedna/ai/feature-abc", base="main") -> DraftPullRequest:
     draft = DraftPullRequest(
         organization_id=api_context.organization.id,
         engineering_request_id=uuid.UUID(request_id),
@@ -96,31 +87,37 @@ def _draft_and_run(
         is_pushed=False,
         human_approval_required=True,
     )
-    run = ExecutionRun(
+    api_context.db.add(draft)
+    api_context.db.commit()
+    return draft
+
+
+def _validation(api_context, request_id: str, *, status="passed") -> ValidationRun:
+    run = ValidationRun(
         organization_id=api_context.organization.id,
         engineering_request_id=uuid.UUID(request_id),
-        execution_id=f"exec-{uuid.UUID(request_id).hex}",
-        status=run_status,
-        completed_stages=["materialize", "generate", "apply", "validate"],
-        workspace_path=str(workspace) if workspace else None,
-        code_plan={"files_to_modify": [], "files_to_create": files_to_create or [], "files_to_delete": []},
-        report={"healing": None},
+        status=status,
+        checks=[{"name": "pytest", "status": "passed"}],
+        report={"success": status == "passed", "passed": ["pytest"]},
     )
-    api_context.db.add_all([draft, run])
+    api_context.db.add(run)
     api_context.db.commit()
-    return draft, run
+    return run
 
 
-def test_creates_draft_pr_with_mocked_github(api_context, monkeypatch, tmp_path) -> None:
+def _creator(api_context, **kwargs) -> GitHubDraftPRCreator:
+    return GitHubDraftPRCreator(api_context.db, **kwargs)
+
+
+def test_creates_draft_pr_with_mocked_github(api_context, monkeypatch) -> None:
     request_id = _approved_request(api_context, monkeypatch)
-    ws = tmp_path / "ws"
-    ws.mkdir()
-    (ws / "src").mkdir()
-    (ws / "src/feature.py").write_text("x = 1\n")
-    _draft_and_run(api_context, request_id, workspace=ws, files_to_create=["src/feature.py"])
+    _draft(api_context, request_id)
+    _validation(api_context, request_id, status="passed")
 
     client = FakeClient()
-    draft = GitHubDraftPRCreator(api_context.db, client=client).create(
+    draft = _creator(
+        api_context, client=client, change_builder=_builder([("src/feature.py", "x = 1\n")])
+    ).create(
         engineering_request_id=uuid.UUID(request_id),
         organization_id=api_context.organization.id,
         actor_user_id=api_context.user.id,
@@ -137,67 +134,78 @@ def test_creates_draft_pr_with_mocked_github(api_context, monkeypatch, tmp_path)
     assert {"draft_pr_creation_started", "draft_pr_branch_pushed", "draft_pr_created"} <= actions
 
 
-def test_refuses_default_branch(api_context, monkeypatch, tmp_path) -> None:
+def test_refuses_when_validation_not_passed(api_context, monkeypatch) -> None:
     request_id = _approved_request(api_context, monkeypatch)
-    _draft_and_run(api_context, request_id, branch="main", base="main", workspace=tmp_path)
+    _draft(api_context, request_id)
+    _validation(api_context, request_id, status="failed")
+    with pytest.raises(AppError) as exc:
+        _creator(api_context, client=FakeClient(), change_builder=_builder([("a.py", "1")])).create(
+            engineering_request_id=uuid.UUID(request_id),
+            organization_id=api_context.organization.id,
+            actor_user_id=api_context.user.id,
+        )
+    assert "validation has not passed" in str(exc.value).lower()
+
+
+def test_refuses_when_no_validation_run(api_context, monkeypatch) -> None:
+    request_id = _approved_request(api_context, monkeypatch)
+    _draft(api_context, request_id)  # no ValidationRun
     with pytest.raises(AppError):
-        GitHubDraftPRCreator(api_context.db, client=FakeClient()).create(
+        _creator(api_context, client=FakeClient(), change_builder=_builder([("a.py", "1")])).create(
             engineering_request_id=uuid.UUID(request_id),
             organization_id=api_context.organization.id,
             actor_user_id=api_context.user.id,
         )
 
 
-def test_refuses_failed_validation(api_context, monkeypatch, tmp_path) -> None:
+def test_refuses_default_branch(api_context, monkeypatch) -> None:
     request_id = _approved_request(api_context, monkeypatch)
-    _draft_and_run(api_context, request_id, run_status="failed", workspace=tmp_path)
+    _draft(api_context, request_id, branch="main", base="main")
+    _validation(api_context, request_id, status="passed")
     with pytest.raises(AppError):
-        GitHubDraftPRCreator(api_context.db, client=FakeClient()).create(
+        _creator(api_context, client=FakeClient(), change_builder=_builder([("a.py", "1")])).create(
             engineering_request_id=uuid.UUID(request_id),
             organization_id=api_context.organization.id,
             actor_user_id=api_context.user.id,
         )
 
 
-def test_refuses_forbidden_files(api_context, monkeypatch, tmp_path) -> None:
+def test_refuses_forbidden_files(api_context, monkeypatch) -> None:
     request_id = _approved_request(api_context, monkeypatch)
-    ws = tmp_path / "ws"
-    ws.mkdir()
-    (ws / ".env").write_text("SECRET=1")
-    _draft_and_run(api_context, request_id, workspace=ws, files_to_create=[".env"])
+    _draft(api_context, request_id)
+    _validation(api_context, request_id, status="passed")
     with pytest.raises(AppError):
-        GitHubDraftPRCreator(api_context.db, client=FakeClient()).create(
+        _creator(api_context, client=FakeClient(), change_builder=_builder([(".env", "SECRET=1")])).create(
             engineering_request_id=uuid.UUID(request_id),
             organization_id=api_context.organization.id,
             actor_user_id=api_context.user.id,
         )
 
 
-def test_refuses_missing_installation(api_context, monkeypatch, tmp_path) -> None:
-    request_id = _approved_request(api_context, monkeypatch, connect=False)  # not connected
-    _draft_and_run(api_context, request_id, workspace=tmp_path)
+def test_refuses_missing_installation(api_context, monkeypatch) -> None:
+    request_id = _approved_request(api_context, monkeypatch, connect=False)
+    _draft(api_context, request_id)
+    _validation(api_context, request_id, status="passed")
     with pytest.raises(AppError):
-        GitHubDraftPRCreator(api_context.db, client=FakeClient()).create(
+        _creator(api_context, client=FakeClient(), change_builder=_builder([("a.py", "1")])).create(
             engineering_request_id=uuid.UUID(request_id),
             organization_id=api_context.organization.id,
             actor_user_id=api_context.user.id,
         )
 
 
-def test_idempotent_duplicate_prevention(api_context, monkeypatch, tmp_path) -> None:
+def test_idempotent_duplicate_prevention(api_context, monkeypatch) -> None:
     request_id = _approved_request(api_context, monkeypatch)
-    ws = tmp_path / "ws"
-    ws.mkdir()
-    _draft_and_run(api_context, request_id, workspace=ws)
+    _draft(api_context, request_id)
+    _validation(api_context, request_id, status="passed")
 
-    creator = GitHubDraftPRCreator(api_context.db, client=FakeClient())
-    first = creator.create(
+    first = _creator(api_context, client=FakeClient(), change_builder=_builder([("a.py", "1")])).create(
         engineering_request_id=uuid.UUID(request_id),
         organization_id=api_context.organization.id,
         actor_user_id=api_context.user.id,
     )
     second_client = FakeClient()
-    second = GitHubDraftPRCreator(api_context.db, client=second_client).create(
+    second = _creator(api_context, client=second_client, change_builder=_builder([("a.py", "1")])).create(
         engineering_request_id=uuid.UUID(request_id),
         organization_id=api_context.organization.id,
         actor_user_id=api_context.user.id,
@@ -206,10 +214,10 @@ def test_idempotent_duplicate_prevention(api_context, monkeypatch, tmp_path) -> 
     assert second_client.pushed is None  # no second push
 
 
-def test_org_isolation(api_context, tmp_path) -> None:
+def test_org_isolation(api_context) -> None:
     other_id = str(uuid.uuid4())
     with pytest.raises(NotFoundError):
-        GitHubDraftPRCreator(api_context.db, client=FakeClient()).create(
+        _creator(api_context, client=FakeClient(), change_builder=_builder([("a.py", "1")])).create(
             engineering_request_id=uuid.UUID(other_id),
             organization_id=api_context.organization.id,
             actor_user_id=api_context.user.id,
