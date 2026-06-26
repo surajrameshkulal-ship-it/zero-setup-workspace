@@ -57,3 +57,8 @@ class DraftPullRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     organization = relationship("Organization", back_populates="draft_pull_requests")
     engineering_request = relationship("EngineeringRequest")
     repository = relationship("Repository")
+
+    # Transient (not persisted): set True when an existing branch/PR was reused
+    # so the API/UI can show "Draft PR already exists" instead of an error.
+    # Unannotated on purpose so SQLAlchemy does not treat it as a column.
+    already_exists = False

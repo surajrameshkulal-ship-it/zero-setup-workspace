@@ -301,6 +301,7 @@ export type DraftPullRequest = {
   human_approval_required: boolean;
   github_pr_number: number | null;
   github_pr_url: string | null;
+  already_exists?: boolean;
   created_at: string;
   updated_at: string;
 };

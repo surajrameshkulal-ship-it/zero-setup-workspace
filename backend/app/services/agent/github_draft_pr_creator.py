@@ -22,7 +22,7 @@ from typing import Callable, Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.errors import AppError, NotFoundError
+from app.core.errors import AppError, IntegrationError, NotFoundError
 from app.integrations.github import GitHubIntegration
 from app.models.draft_pull_request import DraftPullRequest
 from app.models.engineering_request import EngineeringRequest, RequestStatus
@@ -61,8 +61,17 @@ class DefaultDraftPRClient:
     def push_branch(self, *, owner, repo, installation_id, branch, base_branch, files, deletions, message) -> dict:
         token = self.gh.get_installation_token(installation_id)
         base_sha = self.gh.get_branch_sha(token=token, owner=owner, repo=repo, branch=base_branch)
-        self.gh.create_branch(token=token, owner=owner, repo=repo, branch=branch, sha=base_sha)
-        logger.info("branch_created", extra={"owner": owner, "repo": repo, "branch": branch, "base_sha": base_sha})
+        # Idempotent branch creation: GitHub returns 422 "Reference already
+        # exists" when the branch is already there — reuse it rather than fail.
+        reused_branch = False
+        try:
+            self.gh.create_branch(token=token, owner=owner, repo=repo, branch=branch, sha=base_sha)
+            logger.info("branch_created", extra={"owner": owner, "repo": repo, "branch": branch, "base_sha": base_sha})
+        except IntegrationError as exc:
+            if getattr(exc, "upstream_status", None) != 422:
+                raise
+            reused_branch = True
+            logger.info("branch_reused", extra={"owner": owner, "repo": repo, "branch": branch})
         for path, content in files:
             existing = self.gh.get_content_sha(token=token, owner=owner, repo=repo, path=path, ref=branch)
             self.gh.put_file(
@@ -84,18 +93,40 @@ class DefaultDraftPRClient:
                 )
                 logger.info("commit_created", extra={"owner": owner, "repo": repo, "branch": branch, "path": path, "deleted": True})
         logger.info("branch_pushed", extra={"owner": owner, "repo": repo, "branch": branch, "file_count": len(files)})
-        return {"branch": branch, "base_sha": base_sha}
+        return {"branch": branch, "base_sha": base_sha, "reused_branch": reused_branch}
 
     def open_draft_pull_request(self, *, owner, repo, installation_id, head, base, title, body) -> dict:
         token = self.gh.get_installation_token(installation_id)
-        pr = self.gh.create_pull_request(
-            token=token, owner=owner, repo=repo, head=head, base=base, title=title, body=body, draft=True
-        )
+        try:
+            pr = self.gh.create_pull_request(
+                token=token, owner=owner, repo=repo, head=head, base=base, title=title, body=body, draft=True
+            )
+        except IntegrationError as exc:
+            # 422 means a PR already exists for this head branch — reuse it.
+            if getattr(exc, "upstream_status", None) != 422:
+                raise
+            existing = self._find_existing_pr(token, owner, repo, head)
+            if existing is None:
+                raise
+            logger.info(
+                "github_draft_pr_already_exists",
+                extra={"owner": owner, "repo": repo, "number": existing.get("number"), "html_url": existing.get("html_url")},
+            )
+            return {"number": existing.get("number"), "html_url": existing.get("html_url"), "already_exists": True}
         logger.info(
             "github_draft_pr_created",
             extra={"owner": owner, "repo": repo, "number": pr.get("number"), "html_url": pr.get("html_url")},
         )
-        return {"number": pr.get("number"), "html_url": pr.get("html_url")}
+        return {"number": pr.get("number"), "html_url": pr.get("html_url"), "already_exists": False}
+
+    def _find_existing_pr(self, token: str, owner: str, repo: str, head: str) -> dict | None:
+        """Find the existing PR for a head branch (open first, then any state)."""
+        head_filter = f"{owner}:{head}"
+        for state in ("open", "all"):
+            prs = self.gh.list_pull_requests(token=token, owner=owner, repo=repo, head=head_filter, state=state)
+            if prs:
+                return prs[0]
+        return None
 
 
 class GitHubDraftPRCreator:
@@ -130,9 +161,10 @@ class GitHubDraftPRCreator:
         if draft is None:
             raise NotFoundError("Draft pull request metadata not found; prepare the draft first.")
 
-        # Idempotency: never create a duplicate PR.
+        # Idempotency: never create a duplicate PR (already created in a prior run).
         if draft.is_pushed and draft.github_pr_url:
             self._audit(organization_id, actor_user_id, "draft_pr_creation_skipped", request, {"reason": "already_created"})
+            draft.already_exists = True
             return draft
 
         validation = self.db.scalar(
@@ -195,6 +227,7 @@ class GitHubDraftPRCreator:
                 body=body,
             )
 
+            already_exists = bool(pr.get("already_exists"))
             draft.is_pushed = True
             draft.status = "open"
             draft.github_pr_number = pr.get("number")
@@ -202,12 +235,21 @@ class GitHubDraftPRCreator:
             draft.body = body
             self.db.flush()
             self._audit(
-                organization_id, actor_user_id, "draft_pr_created", request,
+                organization_id,
+                actor_user_id,
+                "draft_pr_already_exists" if already_exists else "draft_pr_created",
+                request,
                 {"github_pr_url": draft.github_pr_url, "github_pr_number": draft.github_pr_number},
             )
             self.db.commit()
             self.db.refresh(draft)
-            logger.info("draft_pr_created", extra={"request_id": str(request.id), "pr": draft.github_pr_url})
+            # Transient flag (not persisted) so the API/UI can show a friendly
+            # "Draft PR already exists" message instead of an error.
+            draft.already_exists = already_exists
+            logger.info(
+                "draft_pr_created" if not already_exists else "draft_pr_already_exists",
+                extra={"request_id": str(request.id), "pr": draft.github_pr_url},
+            )
             return draft
         except AppError:
             self.db.commit()

@@ -214,6 +214,143 @@ def test_idempotent_duplicate_prevention(api_context, monkeypatch) -> None:
     assert second_client.pushed is None  # no second push
 
 
+class _FakeGitHub422:
+    """Minimal GitHub integration that simulates 422 'already exists' responses."""
+
+    def __init__(self, *, branch_exists: bool, pr_exists: bool) -> None:
+        self._branch_exists = branch_exists
+        self._pr_exists = pr_exists
+        self.created_branch = False
+        self.created_pr = False
+        self.puts: list[str] = []
+
+    def get_installation_token(self, installation_id):
+        return "tok"
+
+    def get_branch_sha(self, *, token, owner, repo, branch):
+        from app.core.errors import IntegrationError
+
+        # Base branch always resolves; the head branch existence is configurable.
+        if branch == "main":
+            return "base-sha"
+        if self._branch_exists:
+            return "existing-head-sha"
+        raise IntegrationError("not found", upstream_status=404)
+
+    def create_branch(self, *, token, owner, repo, branch, sha):
+        from app.core.errors import IntegrationError
+
+        if self._branch_exists:
+            raise IntegrationError("Reference already exists", upstream_status=422)
+        self.created_branch = True
+        return {"ref": branch}
+
+    def get_content_sha(self, *, token, owner, repo, path, ref):
+        return None
+
+    def put_file(self, *, token, owner, repo, path, content_b64, message, branch, sha=None):
+        self.puts.append(path)
+        return {}
+
+    def delete_file(self, **kwargs):
+        return {}
+
+    def create_pull_request(self, *, token, owner, repo, head, base, title, body, draft=True):
+        from app.core.errors import IntegrationError
+
+        if self._pr_exists:
+            raise IntegrationError("A pull request already exists", upstream_status=422)
+        self.created_pr = True
+        return {"number": 7, "html_url": "https://github.com/acme-labs/payments-api/pull/7"}
+
+    def list_pull_requests(self, *, token, owner, repo, head=None, state="all"):
+        if self._pr_exists:
+            return [{"number": 99, "html_url": "https://github.com/acme-labs/payments-api/pull/99"}]
+        return []
+
+
+def _real_client(gh):
+    from app.services.agent.github_draft_pr_creator import DefaultDraftPRClient
+
+    return DefaultDraftPRClient(integration=gh)
+
+
+def test_duplicate_branch_422_is_reused(api_context, monkeypatch) -> None:
+    request_id = _approved_request(api_context, monkeypatch)
+    _draft(api_context, request_id)
+    _validation(api_context, request_id, status="passed")
+
+    gh = _FakeGitHub422(branch_exists=True, pr_exists=False)
+    draft = _creator(
+        api_context, client=_real_client(gh), change_builder=_builder([("src/feature.py", "x = 1\n")])
+    ).create(
+        engineering_request_id=uuid.UUID(request_id),
+        organization_id=api_context.organization.id,
+        actor_user_id=api_context.user.id,
+    )
+    # Branch already existed: not recreated, but files still pushed and PR opened.
+    assert gh.created_branch is False
+    assert "src/feature.py" in gh.puts
+    assert draft.is_pushed is True
+    assert draft.github_pr_number == 7
+    assert draft.already_exists is False  # the PR itself was newly created
+
+
+def test_duplicate_pr_422_returns_existing(api_context, monkeypatch) -> None:
+    request_id = _approved_request(api_context, monkeypatch)
+    _draft(api_context, request_id)
+    _validation(api_context, request_id, status="passed")
+
+    gh = _FakeGitHub422(branch_exists=True, pr_exists=True)
+    draft = _creator(
+        api_context, client=_real_client(gh), change_builder=_builder([("src/feature.py", "x = 1\n")])
+    ).create(
+        engineering_request_id=uuid.UUID(request_id),
+        organization_id=api_context.organization.id,
+        actor_user_id=api_context.user.id,
+    )
+    # The existing PR is returned instead of creating a duplicate.
+    assert gh.created_pr is False
+    assert draft.is_pushed is True
+    assert draft.github_pr_number == 99
+    assert "pull/99" in draft.github_pr_url
+    assert draft.already_exists is True
+
+    actions = {r.action for r in api_context.db.query(AuditLog).filter(AuditLog.target_id == request_id).all()}
+    assert "draft_pr_already_exists" in actions
+
+
+def test_duplicate_pr_surfaced_in_response_schema(api_context, monkeypatch) -> None:
+    request_id = _approved_request(api_context, monkeypatch)
+    _draft(api_context, request_id)
+    _validation(api_context, request_id, status="passed")
+
+    gh = _FakeGitHub422(branch_exists=True, pr_exists=True)
+    draft = _creator(
+        api_context, client=_real_client(gh), change_builder=_builder([("src/feature.py", "x=1\n")])
+    ).create(
+        engineering_request_id=uuid.UUID(request_id),
+        organization_id=api_context.organization.id,
+        actor_user_id=api_context.user.id,
+    )
+    # Serialize through the response schema to confirm the UI receives the flag.
+    from app.schemas.draft_pull_request import DraftPullRequestRead
+
+    payload = DraftPullRequestRead.model_validate(draft, from_attributes=True)
+    assert payload.already_exists is True
+    assert payload.github_pr_number == 99
+
+
+def test_response_schema_defaults_already_exists_false(api_context, monkeypatch) -> None:
+    # A freshly prepared draft (never serialized through create) defaults to False.
+    request_id = _approved_request(api_context, monkeypatch)
+    draft = _draft(api_context, request_id)
+    from app.schemas.draft_pull_request import DraftPullRequestRead
+
+    payload = DraftPullRequestRead.model_validate(draft, from_attributes=True)
+    assert payload.already_exists is False
+
+
 def test_org_isolation(api_context) -> None:
     other_id = str(uuid.uuid4())
     with pytest.raises(NotFoundError):

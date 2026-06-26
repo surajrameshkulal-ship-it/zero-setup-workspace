@@ -99,11 +99,13 @@ export default function EngineeringRequestDetailPage({
 
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [reason, setReason] = useState("");
 
   const run = useCallback(
     async (label: string, fn: () => Promise<unknown>) => {
       setActionError(null);
+      setNotice(null);
       setBusy(label);
       try {
         await fn();
@@ -120,6 +122,27 @@ export default function EngineeringRequestDetailPage({
     },
     [reload, reloadPlan, reloadCode, reloadDraft, reloadValidation]
   );
+
+  const createGithubPr = useCallback(async () => {
+    if (!request) return;
+    setActionError(null);
+    setNotice(null);
+    setBusy("github_pr");
+    try {
+      const result = await createGithubDraftPullRequest(request.id);
+      setNotice(
+        result.already_exists
+          ? `Draft PR already exists — reusing #${result.github_pr_number}.`
+          : `Draft PR #${result.github_pr_number} created.`
+      );
+      await reloadDraft().catch(() => undefined);
+      await reload().catch(() => undefined);
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Action failed");
+    } finally {
+      setBusy(null);
+    }
+  }, [request, reload, reloadDraft]);
 
   const canAnalyze = request ? ANALYZABLE.has(request.status) : false;
   const isPlanReady = request?.status === "plan_ready";
@@ -681,7 +704,7 @@ export default function EngineeringRequestDetailPage({
                   <button
                     type="button"
                     disabled={busy !== null || validation?.status === "failed"}
-                    onClick={() => run("github_pr", () => createGithubDraftPullRequest(request.id))}
+                    onClick={createGithubPr}
                     className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#125870] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <GitPullRequest className="h-4 w-4" aria-hidden="true" />
@@ -697,6 +720,9 @@ export default function EngineeringRequestDetailPage({
             </p>
             {actionError && busy === null ? (
               <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{actionError}</div>
+            ) : null}
+            {notice && busy === null ? (
+              <div className="mt-3 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">{notice}</div>
             ) : null}
             {draftPr?.is_pushed && draftPr.github_pr_url ? (
               <div className="mt-3 flex flex-wrap items-center gap-3 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm">

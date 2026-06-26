@@ -35,7 +35,16 @@ class AuthenticationError(AppError):
 
 
 class IntegrationError(AppError):
-    def __init__(self, message: str, status_code: int = status.HTTP_502_BAD_GATEWAY) -> None:
+    def __init__(
+        self,
+        message: str,
+        status_code: int = status.HTTP_502_BAD_GATEWAY,
+        *,
+        upstream_status: int | None = None,
+    ) -> None:
+        # `upstream_status` is the status returned by the upstream provider (e.g.
+        # GitHub's 422), distinct from the status_code we surface to our clients.
+        self.upstream_status = upstream_status
         super().__init__(message, status_code=status_code, code="integration_error")
 
 

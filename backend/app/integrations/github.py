@@ -57,7 +57,10 @@ class GitHubIntegration:
                 },
             )
             detail = f": {body[:4000]}" if log_full_error_body and body else ""
-            raise IntegrationError(f"GitHub API request failed with status {response.status_code}{detail}")
+            raise IntegrationError(
+                f"GitHub API request failed with status {response.status_code}{detail}",
+                upstream_status=response.status_code,
+            )
         logger.info("github_api_response", extra={"status_code": response.status_code, "method": method, "path": path})
         return response
 
@@ -253,6 +256,17 @@ class GitHubIntegration:
             token=token,
             json={"head": head, "base": base, "title": title, "body": body, "draft": draft},
         ).json()
+
+    def list_pull_requests(
+        self, *, token: str, owner: str, repo: str, head: str | None = None, state: str = "all"
+    ) -> list[dict[str, Any]]:
+        """List pull requests, optionally filtered by head (``owner:branch``)."""
+        params: dict[str, Any] = {"state": state, "per_page": 100}
+        if head:
+            params["head"] = head
+        response = self._request("GET", f"/repos/{owner}/{repo}/pulls", token=token, params=params)
+        data = response.json()
+        return data if isinstance(data, list) else []
 
     def create_pr_comment(
         self,

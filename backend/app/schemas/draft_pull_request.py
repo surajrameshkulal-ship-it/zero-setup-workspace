@@ -21,5 +21,7 @@ class DraftPullRequestRead(ORMModel):
     human_approval_required: bool
     github_pr_number: int | None
     github_pr_url: str | None
+    # Transient: true when the branch/PR already existed and was reused (idempotent).
+    already_exists: bool = False
     created_at: datetime
     updated_at: datetime
