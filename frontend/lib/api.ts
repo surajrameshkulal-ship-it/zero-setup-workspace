@@ -23,7 +23,8 @@ import type {
   ScanListItem,
   ScanStatus,
   User,
-  ValidationRun
+  ValidationRun,
+  WorkspaceBlueprint
 } from "@/types/api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -173,6 +174,21 @@ export function generateEnvironmentSpec(repositoryId: string): Promise<Environme
 export async function getEnvironmentSpec(repositoryId: string): Promise<EnvironmentSpec | null> {
   try {
     return await apiFetch<EnvironmentSpec>(`/repositories/${repositoryId}/environment-spec`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function generateWorkspaceBlueprint(repositoryId: string): Promise<WorkspaceBlueprint> {
+  return apiFetch<WorkspaceBlueprint>(`/repositories/${repositoryId}/workspace-blueprint`, { method: "POST" });
+}
+
+export async function getWorkspaceBlueprint(repositoryId: string): Promise<WorkspaceBlueprint | null> {
+  try {
+    return await apiFetch<WorkspaceBlueprint>(`/repositories/${repositoryId}/workspace-blueprint`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;

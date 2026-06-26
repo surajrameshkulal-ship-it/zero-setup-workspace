@@ -26,6 +26,7 @@ from app.models.setting import AdminSetting
 from app.models.setup_intent import SetupIntent
 from app.models.user import User, UserRole
 from app.models.validation_run import ValidationRun
+from app.models.workspace_blueprint import WorkspaceBlueprint
 
 __all__ = [
     "AdminSetting",
@@ -57,5 +58,6 @@ __all__ = [
     "User",
     "UserRole",
     "ValidationRun",
+    "WorkspaceBlueprint",
 ]
 

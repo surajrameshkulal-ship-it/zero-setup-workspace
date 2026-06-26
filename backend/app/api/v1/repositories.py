@@ -12,16 +12,19 @@ from app.models.repository_dna import RepositoryDNA
 from app.models.scan import PullRequestScan
 from app.models.setup_intent import SetupIntent
 from app.models.user import User
+from app.models.workspace_blueprint import WorkspaceBlueprint
 from app.schemas.environment_spec import EnvironmentSpecRead
 from app.schemas.repository import RepositoryConnectRequest, RepositoryRead, RepositoryUpdate
 from app.schemas.repository_dna import RepositoryDNARead
 from app.schemas.scan import ManualScanRequest, ScanListItem, ScanQueuedResponse
 from app.schemas.setup_intent import SetupIntentRead
+from app.schemas.workspace_blueprint import WorkspaceBlueprintRead
 from app.services.repository_dna_service import RepositoryDNAService
 from app.services.repository_service import RepositoryService
 from app.services.scan_service import PullRequestScanService
 from app.services.workspace.environment_spec_generator import EnvironmentSpecGenerator
 from app.services.workspace.setup_intent_reader import SetupIntentReader
+from app.services.workspace.workspace_builder import WorkspaceBuilder
 
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
@@ -146,6 +149,32 @@ def generate_environment_spec(
     Specification only — never launches, executes, or installs anything.
     """
     return EnvironmentSpecGenerator(db).generate(
+        repository_id=repository_id,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@router.get("/{repository_id}/workspace-blueprint", response_model=WorkspaceBlueprintRead)
+def get_workspace_blueprint(
+    repository_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> WorkspaceBlueprint:
+    return WorkspaceBuilder(db).get_for_repository(repository_id, current_user.organization_id)
+
+
+@router.post("/{repository_id}/workspace-blueprint", response_model=WorkspaceBlueprintRead)
+def generate_workspace_blueprint(
+    repository_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> WorkspaceBlueprint:
+    """Convert the environment spec into a reproducible workspace blueprint.
+
+    Planning/generation only — never launches, executes, installs, or modifies.
+    """
+    return WorkspaceBuilder(db).generate(
         repository_id=repository_id,
         organization_id=current_user.organization_id,
         actor_user_id=current_user.id,

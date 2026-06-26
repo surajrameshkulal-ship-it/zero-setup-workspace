@@ -49,6 +49,11 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="organization",
         cascade="all, delete-orphan",
     )
+    workspace_blueprints = relationship(
+        "WorkspaceBlueprint",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+    )
     code_generation_previews = relationship(
         "CodeGenerationPreview",
         back_populates="organization",

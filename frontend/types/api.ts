@@ -412,6 +412,55 @@ export type EnvironmentSpec = {
   updated_at: string;
 };
 
+export type WorkspaceBlueprint = {
+  id: string;
+  organization_id: string;
+  repository_id: string;
+  repository_full_name: string | null;
+  language: string | null;
+  runtime: string | null;
+  runtime_version: string | null;
+  package_manager: string | null;
+  framework: string | null;
+  workspace_structure: {
+    project_root?: string;
+    source_directories?: string[];
+    test_directories?: string[];
+    documentation_directories?: string[];
+    configuration_directories?: string[];
+    generated_directories?: string[];
+    ignored_directories?: string[];
+    [key: string]: unknown;
+  };
+  environment_files: Array<{ name: string; action: string; purpose: string; variable_names: string[]; entries?: string[] }>;
+  docker_assets: Array<{ name: string; status: string; description: string; extensions?: string[] }>;
+  ide_assets: Array<{ name: string; status: string; description: string; extensions?: string[] }>;
+  startup_plan: {
+    install_sequence?: string[];
+    build_sequence?: string[];
+    start_sequence?: string[];
+    health_check_sequence?: string[];
+    shutdown_sequence?: string[];
+    note?: string;
+    [key: string]: unknown;
+  };
+  workspace_resources: {
+    cpu?: number;
+    ram_mb?: number;
+    disk_mb?: number;
+    network_access?: boolean;
+    volumes?: string[];
+    services?: string[];
+    [key: string]: unknown;
+  };
+  readiness_score: number;
+  recommendations: string[];
+  warnings: string[];
+  safety: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {
