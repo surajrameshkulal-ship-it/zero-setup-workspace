@@ -32,5 +32,6 @@ class SetupIntentRead(ORMModel):
     confidence_score: float
     sources_analyzed: list
     notes: list
+    evidence: list = []
     created_at: datetime
     updated_at: datetime

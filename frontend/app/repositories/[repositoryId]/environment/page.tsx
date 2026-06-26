@@ -261,6 +261,37 @@ export default function EnvironmentSpecPage({
                 </div>
               ) : null}
 
+              {spec.evidence && spec.evidence.length ? (
+                <section className="rounded-lg border border-line bg-panel shadow-surface">
+                  <div className="border-b border-line px-4 py-3">
+                    <h2 className="text-sm font-semibold text-ink">Inference evidence</h2>
+                    <p className="mt-1 text-xs text-slate-500">Why each value was inferred, and from which source.</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-line text-sm">
+                      <thead className="bg-mist text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                        <tr>
+                          <th className="px-4 py-2">Field</th>
+                          <th className="px-4 py-2">Value</th>
+                          <th className="px-4 py-2">Source</th>
+                          <th className="px-4 py-2">Why</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {spec.evidence.map((e, i) => (
+                          <tr key={i} className="align-top">
+                            <td className="px-4 py-2 font-mono text-xs text-slate-700">{e.field}</td>
+                            <td className="px-4 py-2 font-mono text-xs text-slate-800">{String(Array.isArray(e.value) ? e.value.join(", ") : e.value)}</td>
+                            <td className="px-4 py-2 text-xs text-slate-600">{e.source}</td>
+                            <td className="px-4 py-2 text-xs text-slate-500">{e.detail}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ) : null}
+
               <p className="text-xs text-slate-400">Last generated {formatDateTime(spec.updated_at)}.</p>
             </>
           )}

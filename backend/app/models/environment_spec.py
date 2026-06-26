@@ -75,6 +75,9 @@ class EnvironmentSpec(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     assumptions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     missing_information: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     warnings: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # [{"field": str, "value": Any, "source": str, "detail": str}] — explains
+    # why each inferred value was chosen.
+    evidence: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     organization = relationship("Organization", back_populates="environment_specs")
     repository = relationship("Repository")

@@ -409,8 +409,16 @@ export type EnvironmentSpec = {
   assumptions: string[];
   missing_information: string[];
   warnings: string[];
+  evidence?: InferenceEvidence[];
   created_at: string;
   updated_at: string;
+};
+
+export type InferenceEvidence = {
+  field: string;
+  value: unknown;
+  source: string;
+  detail: string;
 };
 
 export type WorkspaceBlueprint = {

@@ -225,6 +225,11 @@ class EnvironmentSpecGenerator:
         }
 
         confidence = round(min(1.0, max(0.0, (intent.confidence_score or 0.0) - (0.1 if strategy == "unknown" else 0.0))), 2)
+        # Guarantee a non-zero confidence whenever there is real evidence.
+        if confidence == 0.0 and (primary_language or framework or intent.evidence):
+            confidence = 0.1
+
+        evidence = self._build_evidence(intent, primary_language, runtime_name, framework, app_ports, strategy)
 
         return {
             "primary_language": primary_language,
@@ -255,9 +260,57 @@ class EnvironmentSpecGenerator:
             "assumptions": assumptions,
             "missing_information": missing,
             "warnings": warnings,
+            "evidence": evidence,
         }
 
     # -- helpers ---------------------------------------------------------------
+
+    @staticmethod
+    def _build_evidence(
+        intent: SetupIntent,
+        primary_language: str | None,
+        runtime_name: str | None,
+        framework: str | None,
+        app_ports: list[int],
+        strategy: str,
+    ) -> list[dict]:
+        """Carry the Setup Intent evidence forward and add spec-level reasoning."""
+        evidence = list(intent.evidence or [])
+        if primary_language:
+            evidence.append({
+                "field": "primary_language",
+                "value": primary_language,
+                "source": "Setup Intent",
+                "detail": f"Chosen as the primary language from detected languages {list(intent.languages or [])}.",
+            })
+        if runtime_name:
+            evidence.append({
+                "field": "runtime_name",
+                "value": runtime_name,
+                "source": "language→runtime mapping",
+                "detail": f"{runtime_name} is the standard runtime for {primary_language}.",
+            })
+        if framework:
+            evidence.append({
+                "field": "framework",
+                "value": framework,
+                "source": "Setup Intent",
+                "detail": f"Selected '{framework}' as the primary application framework.",
+            })
+        if app_ports:
+            evidence.append({
+                "field": "ports",
+                "value": app_ports,
+                "source": "manifest or framework default",
+                "detail": f"Application port(s) {app_ports}.",
+            })
+        evidence.append({
+            "field": "container_strategy",
+            "value": strategy,
+            "source": "Docker/runtime analysis",
+            "detail": f"Chose '{strategy}' based on Dockerfile/compose presence and available run commands.",
+        })
+        return evidence
 
     @staticmethod
     def _primary(values: list[str], priority: list[str]) -> str | None:

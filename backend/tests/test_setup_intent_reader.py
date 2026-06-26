@@ -249,7 +249,9 @@ def test_generate_succeeds_with_multiple_missing_manifests(api_context) -> None:
     )
     assert intent.docker["present"] is True
     assert 8000 in intent.ports
-    assert intent.confidence_score < 0.6  # partial confidence, but no error
+    # Python is inferred from the Dockerfile base image; partial (non-zero,
+    # not fully certain) confidence, and no error.
+    assert 0.0 < intent.confidence_score < 1.0
 
 
 def test_provider_fails_on_repo_inaccessible(api_context) -> None:

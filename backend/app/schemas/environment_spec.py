@@ -38,5 +38,6 @@ class EnvironmentSpecRead(ORMModel):
     assumptions: list
     missing_information: list
     warnings: list
+    evidence: list = []
     created_at: datetime
     updated_at: datetime

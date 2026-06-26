@@ -59,6 +59,9 @@ class SetupIntent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     confidence_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     sources_analyzed: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     notes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # [{"field": str, "value": Any, "source": str, "detail": str}] — explains
+    # why each inferred value was chosen.
+    evidence: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     organization = relationship("Organization", back_populates="setup_intents")
     repository = relationship("Repository")
