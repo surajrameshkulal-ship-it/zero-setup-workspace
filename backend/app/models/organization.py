@@ -54,6 +54,11 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="organization",
         cascade="all, delete-orphan",
     )
+    workspace_provision_plans = relationship(
+        "WorkspaceProvisionPlan",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+    )
     code_generation_previews = relationship(
         "CodeGenerationPreview",
         back_populates="organization",

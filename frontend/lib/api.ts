@@ -24,7 +24,8 @@ import type {
   ScanStatus,
   User,
   ValidationRun,
-  WorkspaceBlueprint
+  WorkspaceBlueprint,
+  WorkspaceProvisionPlan
 } from "@/types/api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -189,6 +190,23 @@ export function generateWorkspaceBlueprint(repositoryId: string): Promise<Worksp
 export async function getWorkspaceBlueprint(repositoryId: string): Promise<WorkspaceBlueprint | null> {
   try {
     return await apiFetch<WorkspaceBlueprint>(`/repositories/${repositoryId}/workspace-blueprint`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function generateWorkspaceProvision(repositoryId: string): Promise<WorkspaceProvisionPlan> {
+  return apiFetch<WorkspaceProvisionPlan>(`/repositories/${repositoryId}/workspace-provision`, {
+    method: "POST"
+  });
+}
+
+export async function getWorkspaceProvision(repositoryId: string): Promise<WorkspaceProvisionPlan | null> {
+  try {
+    return await apiFetch<WorkspaceProvisionPlan>(`/repositories/${repositoryId}/workspace-provision`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;

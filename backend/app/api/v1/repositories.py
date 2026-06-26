@@ -13,18 +13,21 @@ from app.models.scan import PullRequestScan
 from app.models.setup_intent import SetupIntent
 from app.models.user import User
 from app.models.workspace_blueprint import WorkspaceBlueprint
+from app.models.workspace_provision_plan import WorkspaceProvisionPlan
 from app.schemas.environment_spec import EnvironmentSpecRead
 from app.schemas.repository import RepositoryConnectRequest, RepositoryRead, RepositoryUpdate
 from app.schemas.repository_dna import RepositoryDNARead
 from app.schemas.scan import ManualScanRequest, ScanListItem, ScanQueuedResponse
 from app.schemas.setup_intent import SetupIntentRead
 from app.schemas.workspace_blueprint import WorkspaceBlueprintRead
+from app.schemas.workspace_provision_plan import WorkspaceProvisionPlanRead
 from app.services.repository_dna_service import RepositoryDNAService
 from app.services.repository_service import RepositoryService
 from app.services.scan_service import PullRequestScanService
 from app.services.workspace.environment_spec_generator import EnvironmentSpecGenerator
 from app.services.workspace.setup_intent_reader import SetupIntentReader
 from app.services.workspace.workspace_builder import WorkspaceBuilder
+from app.services.workspace.workspace_provisioner import WorkspaceProvisioner
 
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
@@ -175,6 +178,33 @@ def generate_workspace_blueprint(
     Planning/generation only — never launches, executes, installs, or modifies.
     """
     return WorkspaceBuilder(db).generate(
+        repository_id=repository_id,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@router.get("/{repository_id}/workspace-provision", response_model=WorkspaceProvisionPlanRead)
+def get_workspace_provision(
+    repository_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> WorkspaceProvisionPlan:
+    return WorkspaceProvisioner(db).get_for_repository(repository_id, current_user.organization_id)
+
+
+@router.post("/{repository_id}/workspace-provision", response_model=WorkspaceProvisionPlanRead)
+def generate_workspace_provision(
+    repository_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> WorkspaceProvisionPlan:
+    """Prepare a runnable workspace plan from the workspace blueprint.
+
+    Preparation only — never starts Docker, runs compose, executes code,
+    starts services, installs dependencies, deploys, or modifies the repository.
+    """
+    return WorkspaceProvisioner(db).generate(
         repository_id=repository_id,
         organization_id=current_user.organization_id,
         actor_user_id=current_user.id,

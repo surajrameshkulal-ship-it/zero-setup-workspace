@@ -461,6 +461,56 @@ export type WorkspaceBlueprint = {
   updated_at: string;
 };
 
+export type WorkspaceProvisionPlan = {
+  id: string;
+  organization_id: string;
+  repository_id: string;
+  repository_full_name: string | null;
+  language: string | null;
+  runtime: string | null;
+  runtime_version: string | null;
+  package_manager: string | null;
+  framework: string | null;
+  workspace_directory: {
+    workspace_root?: string;
+    repository_location?: string;
+    config_directory?: string;
+    cache_directory?: string;
+    logs_directory?: string;
+    temp_directory?: string;
+    note?: string;
+    [key: string]: unknown;
+  };
+  environment_preparation: {
+    env_template?: string[];
+    generated_env_template?: string;
+    runtime_config?: { runtime?: string | null; runtime_version?: string | null; [key: string]: unknown };
+    runtime_version_files?: string[];
+    package_manager_config?: { manager?: string | null; config_file?: string | null };
+    has_env_example?: boolean;
+    note?: string;
+    [key: string]: unknown;
+  };
+  container_preparation: {
+    docker_image_plan?: { status?: string; base_image?: string; note?: string };
+    docker_compose_plan?: { status?: string; services?: string[]; note?: string };
+    dev_container_plan?: { status?: string; file?: string };
+    network_plan?: { isolated?: boolean; exposed_ports?: number[] };
+    volume_plan?: { volumes?: string[]; workspace_mount?: string };
+    note?: string;
+    [key: string]: unknown;
+  };
+  dependency_plan: Array<{ command: string; status: string }>;
+  startup_plan: Array<{ order: number; phase: string; actions: string[] }>;
+  validation: Array<{ label: string; status: string; detail?: string; points?: number }>;
+  readiness_score: number;
+  recommendations: string[];
+  warnings: string[];
+  safety: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {
