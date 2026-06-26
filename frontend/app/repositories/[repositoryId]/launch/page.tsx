@@ -1,13 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useState } from "react";
-import { ArrowLeft, Play, Square, Rocket } from "lucide-react";
+import { use, useCallback, useEffect, useState } from "react";
+import { ArrowLeft, ExternalLink, Play, Rocket, Square, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { Badge } from "@/components/badges";
 import { EmptyState, ErrorState, LoadingState } from "@/components/data-state";
-import { getRepository, getWorkspaceLaunch, launchWorkspace, stopWorkspaceLaunch } from "@/lib/api";
+import { ActionButton, SectionCard } from "@/components/ui";
+import {
+  deleteWorkspaceInstance,
+  getLatestWorkspaceInstance,
+  getRepository,
+  launchWorkspaceInstance,
+  stopWorkspaceInstance
+} from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { useApiResource } from "@/hooks/use-api-resource";
+import type { WorkspaceInstance } from "@/types/api";
+
+const TRANSITIONAL = new Set(["pending", "provisioning", "installing", "starting"]);
+const ACTIVE = new Set(["running", "pending", "provisioning", "installing", "starting"]);
+
+function statusTone(status: string) {
+  if (status === "running") return "success" as const;
+  if (status === "failed") return "danger" as const;
+  if (status === "stopped") return "neutral" as const;
+  return "info" as const;
+}
 
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -18,27 +37,31 @@ function Field({ label, value }: { label: string; value: string | null | undefin
   );
 }
 
-function statusColor(status: string): string {
-  if (status === "healthy" || status === "running") return "border-emerald-300 bg-emerald-50 text-emerald-800";
-  if (status === "unhealthy" || status === "expired") return "border-amber-300 bg-amber-50 text-amber-800";
-  if (status === "failed") return "border-rose-300 bg-rose-50 text-rose-800";
-  if (status === "stopped") return "border-line bg-mist text-slate-600";
-  return "border-sky-300 bg-sky-50 text-sky-800";
-}
-
 export default function LaunchPage({ params }: { params: Promise<{ repositoryId: string }> }) {
   const { repositoryId } = use(params);
   const loader = useCallback(async () => {
-    const [repository, launch] = await Promise.all([
+    const [repository, instance] = await Promise.all([
       getRepository(repositoryId),
-      getWorkspaceLaunch(repositoryId)
+      getLatestWorkspaceInstance(repositoryId)
     ]);
-    return { repository, launch };
+    return { repository, instance };
   }, [repositoryId]);
   const { data, error, isLoading, reload } = useApiResource(loader);
 
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const instance: WorkspaceInstance | null = data?.instance ?? null;
+  const status = instance?.status ?? "";
+
+  // Poll while the sandbox is moving through its lifecycle.
+  useEffect(() => {
+    if (!TRANSITIONAL.has(status)) return;
+    const timer = setInterval(() => {
+      reload().catch(() => undefined);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [status, reload]);
 
   const run = useCallback(
     async (label: string, fn: () => Promise<unknown>) => {
@@ -56,16 +79,15 @@ export default function LaunchPage({ params }: { params: Promise<{ repositoryId:
     [reload]
   );
 
-  const launch = data?.launch ?? null;
-  const active = launch && ["running", "healthy", "unhealthy"].includes(launch.status);
-  const limits = launch?.resource_limits ?? {};
+  const canStop = instance && ACTIVE.has(instance.status) && instance.status !== "stopped";
 
   return (
     <AppShell
       title={data ? `${data.repository.full_name} · Launch` : "Launch"}
+      description="Run the project in an isolated local sandbox"
       actions={
         <Link
-          className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded border border-line bg-panel text-slate-700 hover:bg-mist"
+          className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-panel text-slate-700 hover:bg-mist"
           href="/repositories"
           title="Repositories"
         >
@@ -73,123 +95,111 @@ export default function LaunchPage({ params }: { params: Promise<{ repositoryId:
         </Link>
       }
     >
-      {isLoading ? <LoadingState label="Loading workspace launch" /> : null}
+      {isLoading ? <LoadingState label="Loading sandbox" /> : null}
       {error ? <ErrorState message={error} onRetry={() => reload().catch(() => undefined)} /> : null}
       {data ? (
         <div className="space-y-6">
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-panel p-4 shadow-surface">
-            <div className="flex items-center gap-2">
-              <Rocket className="h-4 w-4 text-brand" aria-hidden="true" />
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-panel p-5 shadow-surface">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand ring-1 ring-brand/10">
+                <Rocket className="h-4 w-4" aria-hidden="true" />
+              </span>
               <div>
-                <div className="text-sm font-semibold text-ink">Local sandbox</div>
+                <div className="text-sm font-semibold text-ink">Sandbox lifecycle</div>
                 <div className="text-xs text-slate-500">
-                  Runs the project in an isolated container: read-only source, no secrets, resource quotas, and a TTL.
-                  Never merges, deploys, or modifies the repository.
+                  Fetches the repo into an isolated workspace, installs dependencies, starts the runtime, and probes
+                  readiness. Read-only checkout — never merges, deploys, or modifies the repository.
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={busy !== null}
-                onClick={() => run("launch", () => launchWorkspace(repositoryId))}
-                className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+              <ActionButton
+                icon={Play}
+                loading={busy === "launch"}
+                onClick={() => run("launch", () => launchWorkspaceInstance(repositoryId))}
               >
-                <Play className="h-4 w-4" aria-hidden="true" />
-                {busy === "launch" ? "Launching" : active ? "Relaunch" : "Launch sandbox"}
-              </button>
-              {active ? (
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => run("stop", () => stopWorkspaceLaunch(repositoryId))}
-                  className="focus-ring inline-flex items-center gap-2 rounded border border-line bg-panel px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-mist disabled:cursor-not-allowed disabled:opacity-60"
+                {instance ? "Relaunch" : "Launch sandbox"}
+              </ActionButton>
+              {canStop ? (
+                <ActionButton
+                  variant="secondary"
+                  icon={Square}
+                  loading={busy === "stop"}
+                  onClick={() => instance && run("stop", () => stopWorkspaceInstance(instance.id))}
                 >
-                  <Square className="h-4 w-4" aria-hidden="true" />
-                  {busy === "stop" ? "Stopping" : "Stop"}
-                </button>
+                  Stop
+                </ActionButton>
+              ) : null}
+              {instance ? (
+                <ActionButton
+                  variant="danger"
+                  icon={Trash2}
+                  loading={busy === "delete"}
+                  onClick={() => run("delete", () => deleteWorkspaceInstance(instance.id))}
+                >
+                  Delete
+                </ActionButton>
               ) : null}
             </div>
           </section>
 
           {actionError ? <ErrorState message={actionError} /> : null}
 
-          {!launch ? (
+          {!instance ? (
             <EmptyState
               icon={Rocket}
               title="No sandbox yet"
-              description="Launch an isolated local sandbox from the workspace provision plan (generate the provision plan first if you haven't)."
+              description="Launch an isolated sandbox from the workspace provision plan (generate the provision plan first if you haven't)."
             />
           ) : (
             <>
-              <section className="rounded-lg border border-line bg-panel p-4 shadow-surface">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-ink">Status</h2>
-                  <span className={`inline-flex rounded border px-2 py-0.5 text-xs font-semibold ${statusColor(launch.status)}`}>
-                    {launch.status}
-                    {launch.health_status ? ` · ${launch.health_status}` : ""}
-                  </span>
-                </div>
-                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-                  <Field label="Runtime" value={launch.runtime} />
-                  <Field label="Image" value={launch.image} />
-                  <Field label="Container" value={launch.container_id} />
+              <SectionCard
+                title="Status"
+                actions={
+                  <div className="flex items-center gap-2">
+                    {TRANSITIONAL.has(status) ? (
+                      <span className="text-xs text-slate-400">auto-refreshing…</span>
+                    ) : null}
+                    <Badge tone={statusTone(status)}>{status}</Badge>
+                  </div>
+                }
+              >
+                <dl className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                  <Field label="Runtime" value={instance.runtime} />
                   <div>
-                    <dt className="text-xs uppercase tracking-[0.08em] text-slate-500">URL</dt>
+                    <dt className="text-xs uppercase tracking-[0.08em] text-slate-500">Preview URL</dt>
                     <dd className="mt-1 font-mono text-sm">
-                      {launch.published_url ? (
-                        <a className="text-brand hover:underline" href={launch.published_url} target="_blank" rel="noreferrer">
-                          {launch.published_url}
+                      {instance.preview_url && instance.preview_url.startsWith("http") ? (
+                        <a className="inline-flex items-center gap-1 text-brand hover:underline" href={instance.preview_url} target="_blank" rel="noreferrer">
+                          {instance.preview_url}
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
                         </a>
-                      ) : "—"}
+                      ) : (
+                        instance.preview_url || "—"
+                      )}
                     </dd>
                   </div>
-                  <Field label="Start command" value={launch.start_command} />
-                  <Field
-                    label="Ports"
-                    value={launch.port_mappings.map((p) => `${p.host}→${p.container}`).join(", ") || null}
-                  />
-                  <Field label="Started" value={launch.started_at ? formatDateTime(launch.started_at) : null} />
-                  <Field label="Expires (TTL)" value={launch.expires_at ? formatDateTime(launch.expires_at) : null} />
+                  <Field label="Ports" value={instance.exposed_ports.join(", ") || null} />
+                  <Field label="Install command" value={instance.install_command} />
+                  <Field label="Start command" value={instance.runtime_command} />
+                  <Field label="Started" value={formatDateTime(instance.created_at)} />
                 </dl>
-                {launch.failure_reason ? (
-                  <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                    {launch.failure_reason}
+                {instance.error_message ? (
+                  <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                    {instance.error_message}
                   </div>
                 ) : null}
-                {launch.health_detail ? (
-                  <div className="mt-3 text-xs text-slate-500">Health: {launch.health_detail}</div>
-                ) : null}
-              </section>
+              </SectionCard>
 
-              <section className="rounded-lg border border-line bg-panel p-4 shadow-surface">
-                <h2 className="text-sm font-semibold text-ink">Isolation &amp; quotas</h2>
-                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3 xl:grid-cols-5">
-                  <div><dt className="text-xs text-slate-500">CPU</dt><dd className="font-semibold text-ink">{String(limits.cpu ?? "—")}</dd></div>
-                  <div><dt className="text-xs text-slate-500">Memory</dt><dd className="font-semibold text-ink">{String(limits.memory_mb ?? "—")} MB</dd></div>
-                  <div><dt className="text-xs text-slate-500">PIDs</dt><dd className="font-semibold text-ink">{String(limits.pids_limit ?? "—")}</dd></div>
-                  <div><dt className="text-xs text-slate-500">Network</dt><dd className="font-semibold text-ink">{String(limits.network ?? "—")}</dd></div>
-                  <div><dt className="text-xs text-slate-500">TTL</dt><dd className="font-semibold text-ink">{Math.round(launch.ttl_seconds / 60)} min</dd></div>
-                </dl>
-                <p className="mt-3 text-xs text-slate-500">
-                  Read-only source mount · secrets never materialized · no merge/deploy/push · auto-cleanup on TTL.
-                </p>
-              </section>
-
-              <section className="rounded-lg border border-line bg-panel shadow-surface">
-                <div className="border-b border-line px-4 py-3"><h2 className="text-sm font-semibold text-ink">Logs</h2></div>
-                <div className="p-4">
-                  {launch.logs_tail.length === 0 ? (
-                    <p className="text-sm text-slate-500">No logs.</p>
-                  ) : (
-                    <pre className="max-h-80 overflow-auto rounded bg-ink/95 p-3 font-mono text-xs leading-relaxed text-mist">
-                      {launch.logs_tail.join("\n")}
-                    </pre>
-                  )}
-                </div>
-              </section>
-
-              <p className="text-xs text-slate-400">Last updated {formatDateTime(launch.updated_at)}.</p>
+              <SectionCard title="Logs" bodyClassName="p-0">
+                {instance.logs.length === 0 ? (
+                  <p className="p-5 text-sm text-slate-500">No logs yet.</p>
+                ) : (
+                  <pre className="max-h-96 overflow-auto rounded-b-xl bg-ink/95 p-4 font-mono text-xs leading-relaxed text-mist">
+                    {instance.logs.map((l) => `[${l.stream}] ${l.message}`).join("\n")}
+                  </pre>
+                )}
+              </SectionCard>
             </>
           )}
         </div>

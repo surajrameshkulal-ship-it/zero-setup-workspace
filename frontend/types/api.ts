@@ -546,6 +546,40 @@ export type WorkspaceLaunch = {
   updated_at: string;
 };
 
+export type WorkspaceInstanceStatus =
+  | "pending"
+  | "provisioning"
+  | "installing"
+  | "starting"
+  | "running"
+  | "failed"
+  | "stopped";
+
+export type WorkspaceInstanceLog = { stream: string; message: string };
+
+export type WorkspaceInstance = {
+  id: string;
+  organization_id: string;
+  repository_id: string;
+  repository_full_name: string | null;
+  scan_id: string | null;
+  environment_spec_id: string | null;
+  blueprint_id: string | null;
+  provision_id: string | null;
+  status: WorkspaceInstanceStatus | string;
+  runtime: string | null;
+  workspace_path: string | null;
+  install_command: string | null;
+  runtime_command: string | null;
+  preview_url: string | null;
+  exposed_ports: number[];
+  logs: WorkspaceInstanceLog[];
+  error_message: string | null;
+  stopped_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {

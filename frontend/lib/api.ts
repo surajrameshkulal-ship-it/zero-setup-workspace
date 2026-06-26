@@ -25,6 +25,7 @@ import type {
   User,
   ValidationRun,
   WorkspaceBlueprint,
+  WorkspaceInstance,
   WorkspaceLaunch,
   WorkspaceProvisionPlan
 } from "@/types/api";
@@ -99,6 +100,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
         ? String(details.error.message)
         : `Request failed with status ${response.status}`;
     throw new ApiError(response.status, message, details);
+  }
+
+  // No-content responses (e.g. 204 from DELETE) have no body to parse.
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;
@@ -233,6 +239,33 @@ export async function getWorkspaceLaunch(repositoryId: string): Promise<Workspac
     }
     throw error;
   }
+}
+
+// --- Phase 11 Step 5: real sandbox lifecycle (WorkspaceInstance) ---
+
+export function launchWorkspaceInstance(repositoryId: string): Promise<WorkspaceInstance> {
+  return apiFetch<WorkspaceInstance>(`/workspaces/${repositoryId}/launch`, { method: "POST" });
+}
+
+export function listWorkspaceInstances(repositoryId: string): Promise<WorkspaceInstance[]> {
+  return apiFetch<WorkspaceInstance[]>(`/workspaces?repository_id=${repositoryId}`);
+}
+
+export async function getLatestWorkspaceInstance(repositoryId: string): Promise<WorkspaceInstance | null> {
+  const instances = await listWorkspaceInstances(repositoryId);
+  return instances.length > 0 ? instances[0] : null;
+}
+
+export function getWorkspaceInstance(workspaceId: string): Promise<WorkspaceInstance> {
+  return apiFetch<WorkspaceInstance>(`/workspaces/${workspaceId}`);
+}
+
+export function stopWorkspaceInstance(workspaceId: string): Promise<WorkspaceInstance> {
+  return apiFetch<WorkspaceInstance>(`/workspaces/${workspaceId}/stop`, { method: "POST" });
+}
+
+export function deleteWorkspaceInstance(workspaceId: string): Promise<void> {
+  return apiFetch<void>(`/workspaces/${workspaceId}`, { method: "DELETE" });
 }
 
 export function getRepository(repositoryId: string): Promise<Repository> {

@@ -83,3 +83,24 @@ def _run_pr_scan_with_retry(
         raise task.retry(exc=exc, countdown=countdown, max_retries=max_retries)
     finally:
         db.close()
+
+
+@celery_app.task(name="workspace.launch_workspace_task")
+def launch_workspace_task(workspace_id: str, *, session_factory: Callable = SessionLocal) -> str:
+    """Run the real sandbox lifecycle for a created WorkspaceInstance.
+
+    Idempotent and self-contained: the lifecycle service moves the instance
+    through provisioning -> installing -> starting -> running and records any
+    failure on the instance itself (it never raises out of the worker).
+    """
+    from app.services.workspace.workspace_lifecycle import WorkspaceLifecycleService
+
+    db = session_factory()
+    try:
+        instance = WorkspaceLifecycleService(db).run(uuid.UUID(workspace_id))
+        return instance.status
+    except Exception as exc:  # noqa: BLE001 - never crash the worker
+        logger.warning("launch_workspace_task_error", extra={"workspace_id": workspace_id, "error": str(exc)[:300]})
+        return "failed"
+    finally:
+        db.close()

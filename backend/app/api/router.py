@@ -13,6 +13,7 @@ from app.api.v1 import (
     repositories,
     rules,
     scans,
+    workspaces,
 )
 
 
@@ -28,3 +29,4 @@ api_router.include_router(rules.router)
 api_router.include_router(engineering_requests.router)
 api_router.include_router(admin.router)
 api_router.include_router(audit.router)
+api_router.include_router(workspaces.router)
