@@ -22,6 +22,7 @@ from app.models.repository_dna import RepositoryDNA
 from app.models.rule import ArchitectureRule, CompanyRule, CompanyRuleType, Severity
 from app.models.scan import PullRequestScan, RiskLevel, ScanStatus
 from app.models.setting import AdminSetting
+from app.models.setup_intent import SetupIntent
 from app.models.user import User, UserRole
 from app.models.validation_run import ValidationRun
 
@@ -49,6 +50,7 @@ __all__ = [
     "RequestType",
     "RiskLevel",
     "ScanStatus",
+    "SetupIntent",
     "Severity",
     "User",
     "UserRole",

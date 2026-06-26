@@ -75,6 +75,12 @@ export default function RepositoriesPage() {
                         </Link>
                         <Link
                           className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
+                          href={`/repositories/${repository.id}/setup-intent`}
+                        >
+                          Setup
+                        </Link>
+                        <Link
+                          className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
                           href={`/repositories/${repository.id}/scans`}
                         >
                           Scans

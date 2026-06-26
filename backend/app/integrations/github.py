@@ -61,6 +61,19 @@ class GitHubIntegration:
         logger.info("github_api_response", extra={"status_code": response.status_code, "method": method, "path": path})
         return response
 
+    def list_directory(self, *, token: str, owner: str, repo: str, path: str, ref: str) -> list[str]:
+        """List file paths in a repository directory (read-only). Empty if absent."""
+        try:
+            response = self._request(
+                "GET", f"/repos/{owner}/{repo}/contents/{path}", token=token, params={"ref": ref}
+            )
+        except IntegrationError:
+            return []
+        data = response.json()
+        if not isinstance(data, list):
+            return []
+        return [item["path"] for item in data if isinstance(item, dict) and item.get("type") == "file"]
+
     def download_tarball(self, *, token: str, owner: str, repo: str, ref: str) -> bytes:
         """Download a read-only tarball of the repository at a ref (no git binary)."""
         url = f"{self.base_url}/repos/{owner}/{repo}/tarball/{ref}"

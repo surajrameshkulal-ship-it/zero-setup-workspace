@@ -335,6 +335,37 @@ export type ValidationRun = {
   updated_at: string;
 };
 
+export type SetupIntent = {
+  id: string;
+  organization_id: string;
+  repository_id: string;
+  repository_full_name: string | null;
+  languages: string[];
+  frameworks: string[];
+  package_manager: string | null;
+  runtime_version: string | null;
+  install_command: string | null;
+  dev_command: string | null;
+  prod_command: string | null;
+  test_command: string | null;
+  build_command: string | null;
+  lint_command: string | null;
+  env_vars: string[];
+  ports: number[];
+  databases: string[];
+  caches: string[];
+  queues: string[];
+  external_services: string[];
+  docker: { present?: boolean; files?: string[]; [key: string]: unknown };
+  cicd_provider: string | null;
+  health_check_endpoint: string | null;
+  confidence_score: number;
+  sources_analyzed: string[];
+  notes: string[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {

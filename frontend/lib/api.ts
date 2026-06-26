@@ -17,6 +17,7 @@ import type {
   Repository,
   RepositoryDNA,
   RiskLevel,
+  SetupIntent,
   ScanDetail,
   ScanListItem,
   ScanStatus,
@@ -141,6 +142,21 @@ export function generateRepositoryDna(repositoryId: string): Promise<RepositoryD
 export async function getRepositoryDna(repositoryId: string): Promise<RepositoryDNA | null> {
   try {
     return await apiFetch<RepositoryDNA>(`/repositories/${repositoryId}/dna`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function generateSetupIntent(repositoryId: string): Promise<SetupIntent> {
+  return apiFetch<SetupIntent>(`/repositories/${repositoryId}/setup-intent`, { method: "POST" });
+}
+
+export async function getSetupIntent(repositoryId: string): Promise<SetupIntent | null> {
+  try {
+    return await apiFetch<SetupIntent>(`/repositories/${repositoryId}/setup-intent`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;
