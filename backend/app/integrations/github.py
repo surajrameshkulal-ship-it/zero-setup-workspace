@@ -51,13 +51,28 @@ class GitHubIntegration:
                 "github_api_error",
                 extra={
                     "status_code": response.status_code,
+                    "method": method,
                     "path": path,
                     "body": body if log_full_error_body else body[:1000],
                 },
             )
             detail = f": {body[:4000]}" if log_full_error_body and body else ""
             raise IntegrationError(f"GitHub API request failed with status {response.status_code}{detail}")
+        logger.info("github_api_response", extra={"status_code": response.status_code, "method": method, "path": path})
         return response
+
+    def download_tarball(self, *, token: str, owner: str, repo: str, ref: str) -> bytes:
+        """Download a read-only tarball of the repository at a ref (no git binary)."""
+        url = f"{self.base_url}/repos/{owner}/{repo}/tarball/{ref}"
+        response = self.session.get(url, headers=self._headers(token), timeout=60, allow_redirects=True)
+        if response.status_code >= 400:
+            logger.warning(
+                "github_api_error",
+                extra={"status_code": response.status_code, "method": "GET", "path": f"/repos/{owner}/{repo}/tarball/{ref}"},
+            )
+            raise IntegrationError(f"GitHub tarball download failed with status {response.status_code}")
+        logger.info("github_api_response", extra={"status_code": response.status_code, "method": "GET", "path": "tarball"})
+        return response.content
 
     def get_installation_token(self, installation_id: int) -> str:
         app_token = self._app_jwt()

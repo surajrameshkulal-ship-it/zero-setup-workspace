@@ -66,6 +66,7 @@ class DefaultDraftPRClient:
         token = self.gh.get_installation_token(installation_id)
         base_sha = self.gh.get_branch_sha(token=token, owner=owner, repo=repo, branch=base_branch)
         self.gh.create_branch(token=token, owner=owner, repo=repo, branch=branch, sha=base_sha)
+        logger.info("branch_created", extra={"owner": owner, "repo": repo, "branch": branch, "base_sha": base_sha})
         for path, content in files:
             existing = self.gh.get_content_sha(token=token, owner=owner, repo=repo, path=path, ref=branch)
             self.gh.put_file(
@@ -78,18 +79,25 @@ class DefaultDraftPRClient:
                 branch=branch,
                 sha=existing,
             )
+            logger.info("commit_created", extra={"owner": owner, "repo": repo, "branch": branch, "path": path})
         for path in deletions:
             existing = self.gh.get_content_sha(token=token, owner=owner, repo=repo, path=path, ref=branch)
             if existing:
                 self.gh.delete_file(
                     token=token, owner=owner, repo=repo, path=path, message=message, branch=branch, sha=existing
                 )
+                logger.info("commit_created", extra={"owner": owner, "repo": repo, "branch": branch, "path": path, "deleted": True})
+        logger.info("branch_pushed", extra={"owner": owner, "repo": repo, "branch": branch, "file_count": len(files)})
         return {"branch": branch, "base_sha": base_sha}
 
     def open_draft_pull_request(self, *, owner, repo, installation_id, head, base, title, body) -> dict:
         token = self.gh.get_installation_token(installation_id)
         pr = self.gh.create_pull_request(
             token=token, owner=owner, repo=repo, head=head, base=base, title=title, body=body, draft=True
+        )
+        logger.info(
+            "github_draft_pr_created",
+            extra={"owner": owner, "repo": repo, "number": pr.get("number"), "html_url": pr.get("html_url")},
         )
         return {"number": pr.get("number"), "html_url": pr.get("html_url")}
 
@@ -130,6 +138,7 @@ class GitHubDraftPRCreator:
         )
 
         self._audit(organization_id, actor_user_id, "draft_pr_creation_started", request, {})
+        logger.info("draft_pr_creation_started", extra={"request_id": str(request.id)})
         try:
             repository, installation = self._validate_preconditions(request, draft, run, organization_id)
 
