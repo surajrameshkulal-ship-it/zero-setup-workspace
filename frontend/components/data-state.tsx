@@ -6,11 +6,11 @@ import clsx from "clsx";
 export function LoadingState({ label = "Loading" }: { label?: string }) {
   return (
     <div
-      className="flex min-h-40 items-center justify-center rounded-lg border border-line bg-panel text-sm text-slate-500"
+      className="flex min-h-40 items-center justify-center rounded-xl border border-line bg-panel text-sm text-slate-500 shadow-surface"
       role="status"
       aria-live="polite"
     >
-      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+      <Loader2 className="mr-2 h-4 w-4 animate-spin text-brand" aria-hidden="true" />
       {label}
     </div>
   );
@@ -24,7 +24,7 @@ export function Skeleton({ className }: { className?: string }) {
 export function TableSkeleton({ rows = 5, columns = 5 }: { rows?: number; columns?: number }) {
   return (
     <div
-      className="rounded-lg border border-line bg-panel p-4 shadow-surface"
+      className="rounded-xl border border-line bg-panel p-4 shadow-surface"
       role="status"
       aria-live="polite"
       aria-label="Loading"
@@ -59,9 +59,9 @@ export function CardsSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="status" aria-live="polite" aria-label="Loading">
       {Array.from({ length: count }).map((_, index) => (
-        <div key={index} className="rounded-lg border border-line bg-panel p-4 shadow-surface">
+        <div key={index} className="rounded-xl border border-line bg-panel p-5 shadow-surface">
           <Skeleton className="h-3 w-24" />
-          <Skeleton className="mt-3 h-7 w-16" />
+          <Skeleton className="mt-3 h-8 w-16" />
           <Skeleton className="mt-2 h-3 w-20" />
         </div>
       ))}
@@ -71,7 +71,7 @@ export function CardsSkeleton({ count = 6 }: { count?: number }) {
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+    <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 shadow-surface" role="alert">
       <div className="flex items-start gap-2">
         <AlertCircle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
         <div className="flex-1">
@@ -107,9 +107,9 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-line bg-panel px-6 py-10 text-center">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-mist text-slate-400">
-        <Icon className="h-5 w-5" aria-hidden="true" />
+    <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line bg-panel px-6 py-12 text-center shadow-surface">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand ring-1 ring-brand/10">
+        <Icon className="h-6 w-6" aria-hidden="true" />
       </div>
       <div>
         <p className="text-sm font-semibold text-ink">{title}</p>

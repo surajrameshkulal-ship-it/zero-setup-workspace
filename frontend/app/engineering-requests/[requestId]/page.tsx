@@ -197,7 +197,7 @@ export default function EngineeringRequestDetailPage({
                 type="button"
                 disabled={!canAnalyze || busy !== null}
                 onClick={() => run("analyze", () => analyzeEngineeringRequest(request.id))}
-                className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-[#125870] disabled:cursor-not-allowed disabled:opacity-60"
+                className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Play className="h-4 w-4" aria-hidden="true" />
                 {busy === "analyze" ? "Analyzing" : request.status === "submitted" ? "Run analysis" : "Re-run analysis"}
@@ -705,7 +705,7 @@ export default function EngineeringRequestDetailPage({
                     type="button"
                     disabled={busy !== null || validation?.status === "failed"}
                     onClick={createGithubPr}
-                    className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#125870] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <GitPullRequest className="h-4 w-4" aria-hidden="true" />
                     {busy === "github_pr" ? "Creating" : "Create Draft PR on GitHub"}

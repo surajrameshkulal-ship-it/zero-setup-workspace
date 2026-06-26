@@ -92,7 +92,7 @@ export default function HomePage() {
             </Link>
             <Link
               href="/login"
-              className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-[#125870]"
+              className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark"
             >
               <LogIn className="h-4 w-4" aria-hidden="true" />
               Sign in
@@ -119,7 +119,7 @@ export default function HomePage() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/login"
-                className="focus-ring inline-flex items-center justify-center gap-2 rounded bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-[#125870]"
+                className="focus-ring inline-flex items-center justify-center gap-2 rounded bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-brand-dark"
               >
                 Open the dashboard
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />

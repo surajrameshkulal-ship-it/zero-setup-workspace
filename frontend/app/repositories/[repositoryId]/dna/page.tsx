@@ -97,7 +97,7 @@ export default function RepositoryDnaPage({
               type="button"
               onClick={generate}
               disabled={busy}
-              className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-[#125870] disabled:cursor-not-allowed disabled:opacity-60"
+              className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
               {busy ? "Generating" : dna ? "Regenerate" : "Generate DNA"}

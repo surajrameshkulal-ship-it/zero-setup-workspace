@@ -2,121 +2,97 @@
 
 import Link from "next/link";
 import { useCallback } from "react";
-import { GitBranch, RefreshCw, Search } from "lucide-react";
+import { GitBranch, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { Badge } from "@/components/badges";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/data-state";
+import { ActionButton, Column, DataTable, SectionCard } from "@/components/ui";
 import { listRepositories } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useApiResource } from "@/hooks/use-api-resource";
+import type { Repository } from "@/types/api";
+
+const PIPELINE = [
+  { slug: "dna", label: "DNA" },
+  { slug: "setup-intent", label: "Setup" },
+  { slug: "environment", label: "Env" },
+  { slug: "workspace", label: "Workspace" },
+  { slug: "provision", label: "Provision" },
+  { slug: "launch", label: "Launch" },
+  { slug: "scans", label: "Scans" }
+];
 
 export default function RepositoriesPage() {
   const loader = useCallback(() => listRepositories(), []);
   const { data, error, isLoading, reload } = useApiResource(loader);
 
+  const columns: Column<Repository>[] = [
+    {
+      key: "repo",
+      header: "Repository",
+      render: (r) => (
+        <div>
+          <div className="font-medium text-ink">{r.full_name}</div>
+          <div className="text-xs text-slate-500">#{r.github_repository_id}</div>
+        </div>
+      )
+    },
+    { key: "branch", header: "Default branch", render: (r) => <span className="font-mono text-xs text-slate-600">{r.default_branch}</span> },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => <Badge tone={r.is_active ? "success" : "neutral"}>{r.is_active ? "active" : "inactive"}</Badge>
+    },
+    { key: "created", header: "Created", render: (r) => <span className="text-slate-500">{formatDate(r.created_at)}</span> },
+    {
+      key: "actions",
+      header: "Pipeline",
+      align: "right",
+      render: (r) => (
+        <div className="flex flex-wrap justify-end gap-1">
+          {PIPELINE.map((p) => (
+            <Link
+              key={p.slug}
+              href={`/repositories/${r.id}/${p.slug}`}
+              className="focus-ring rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-brand-soft hover:text-brand-ink"
+            >
+              {p.label}
+            </Link>
+          ))}
+        </div>
+      )
+    }
+  ];
+
   return (
     <AppShell
       title="Repositories"
+      description="Connected repositories and their governance pipeline"
       actions={
-        <button
-          type="button"
-          className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded border border-line bg-panel text-slate-700 hover:bg-mist"
-          onClick={() => reload().catch(() => undefined)}
-          title="Refresh"
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-        </button>
+        <ActionButton variant="secondary" size="sm" icon={RefreshCw} onClick={() => reload().catch(() => undefined)}>
+          Refresh
+        </ActionButton>
       }
     >
-      {isLoading ? <TableSkeleton rows={5} columns={6} /> : null}
+      {isLoading ? <TableSkeleton rows={5} columns={5} /> : null}
       {error ? <ErrorState message={error} onRetry={() => reload().catch(() => undefined)} /> : null}
       {data ? (
-        <section className="rounded-lg border border-line bg-panel shadow-surface">
-          <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-            <Search className="h-4 w-4 text-slate-500" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-ink">Connected repositories</h2>
-          </div>
-          {data.length === 0 ? (
-            <EmptyState
-              icon={GitBranch}
-              title="No repositories connected"
-              description="Install the CodeDNA GitHub App and register a repository to start scanning pull requests. For a demo, run the seed data script."
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-line text-sm">
-                <thead className="bg-mist text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Repository</th>
-                    <th className="px-4 py-3">Default branch</th>
-                    <th className="px-4 py-3">GitHub ID</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Created</th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {data.map((repository) => (
-                    <tr key={repository.id} className="hover:bg-mist/70">
-                      <td className="whitespace-nowrap px-4 py-3 font-medium text-ink">{repository.full_name}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-700">{repository.default_branch}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">{repository.github_repository_id}</td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <span className="inline-flex rounded border border-line bg-mist px-2 py-0.5 text-xs font-medium text-slate-700">
-                          {repository.is_active ? "active" : "inactive"}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">{formatDate(repository.created_at)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">
-                        <Link
-                          className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
-                          href={`/repositories/${repository.id}/dna`}
-                        >
-                          DNA
-                        </Link>
-                        <Link
-                          className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
-                          href={`/repositories/${repository.id}/setup-intent`}
-                        >
-                          Setup
-                        </Link>
-                        <Link
-                          className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
-                          href={`/repositories/${repository.id}/environment`}
-                        >
-                          Env
-                        </Link>
-                        <Link
-                          className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
-                          href={`/repositories/${repository.id}/workspace`}
-                        >
-                          Workspace
-                        </Link>
-                        <Link
-                          className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
-                          href={`/repositories/${repository.id}/provision`}
-                        >
-                          Provision
-                        </Link>
-                        <Link
-                          className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
-                          href={`/repositories/${repository.id}/launch`}
-                        >
-                          Launch
-                        </Link>
-                        <Link
-                          className="focus-ring rounded px-2 py-1 text-sm font-medium text-brand hover:bg-mist"
-                          href={`/repositories/${repository.id}/scans`}
-                        >
-                          Scans
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+        <SectionCard title="Connected repositories" icon={GitBranch} bodyClassName="p-0">
+          <DataTable
+            columns={columns}
+            rows={data}
+            getRowKey={(r) => r.id}
+            empty={
+              <div className="p-5">
+                <EmptyState
+                  icon={GitBranch}
+                  title="No repositories connected"
+                  description="Install the CodeDNA GitHub App and register a repository to start scanning pull requests. For a demo, run the seed data script."
+                />
+              </div>
+            }
+          />
+        </SectionCard>
       ) : null}
     </AppShell>
   );

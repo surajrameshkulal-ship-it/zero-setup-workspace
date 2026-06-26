@@ -163,7 +163,7 @@ export default function RulesPage() {
             </select>
             <button
               type="submit"
-              className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-[#125870] disabled:opacity-70"
+              className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-70"
               disabled={isSaving}
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -217,7 +217,7 @@ export default function RulesPage() {
             </select>
             <button
               type="submit"
-              className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-[#125870] disabled:opacity-70"
+              className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-70"
               disabled={isSaving}
             >
               <Plus className="h-4 w-4" aria-hidden="true" />

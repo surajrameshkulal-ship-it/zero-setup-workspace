@@ -93,7 +93,7 @@ export default function LaunchPage({ params }: { params: Promise<{ repositoryId:
                 type="button"
                 disabled={busy !== null}
                 onClick={() => run("launch", () => launchWorkspace(repositoryId))}
-                className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-[#125870] disabled:cursor-not-allowed disabled:opacity-60"
+                className="focus-ring inline-flex items-center gap-2 rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Play className="h-4 w-4" aria-hidden="true" />
                 {busy === "launch" ? "Launching" : active ? "Relaunch" : "Launch sandbox"}

@@ -7,77 +7,108 @@ import type {
   ScanStatus
 } from "@/types/api";
 
-const statusClass: Record<ScanStatus, string> = {
-  queued: "border-slate-300 bg-slate-100 text-slate-700",
-  running: "border-blue-300 bg-blue-50 text-blue-700",
-  completed: "border-emerald-300 bg-emerald-50 text-emerald-700",
-  failed: "border-rose-300 bg-rose-50 text-rose-700"
+type Tone = "neutral" | "info" | "brand" | "success" | "warning" | "danger" | "violet" | "cyan";
+
+const TONE: Record<Tone, { pill: string; dot: string }> = {
+  neutral: { pill: "border-slate-200 bg-slate-50 text-slate-600", dot: "bg-slate-400" },
+  info: { pill: "border-blue-200 bg-blue-50 text-blue-700", dot: "bg-blue-500" },
+  brand: { pill: "border-brand/20 bg-brand-soft text-brand-ink", dot: "bg-brand" },
+  success: { pill: "border-emerald-200 bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
+  warning: { pill: "border-amber-200 bg-amber-50 text-amber-800", dot: "bg-amber-500" },
+  danger: { pill: "border-rose-200 bg-rose-50 text-rose-700", dot: "bg-rose-500" },
+  violet: { pill: "border-violet-200 bg-violet-50 text-violet-700", dot: "bg-violet-500" },
+  cyan: { pill: "border-cyan-200 bg-cyan-50 text-cyan-700", dot: "bg-cyan-500" }
 };
 
-const riskClass: Record<RiskLevel, string> = {
-  low: "border-emerald-300 bg-emerald-50 text-emerald-700",
-  medium: "border-amber-300 bg-amber-50 text-amber-800",
-  high: "border-orange-300 bg-orange-50 text-orange-800",
-  critical: "border-rose-300 bg-rose-50 text-rose-800"
+export function Badge({
+  tone = "neutral",
+  dot = true,
+  className,
+  children
+}: {
+  tone?: Tone;
+  dot?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const t = TONE[tone];
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize",
+        t.pill,
+        className
+      )}
+    >
+      {dot ? <span className={clsx("h-1.5 w-1.5 rounded-full", t.dot)} aria-hidden="true" /> : null}
+      {children}
+    </span>
+  );
+}
+
+const statusTone: Record<ScanStatus, Tone> = {
+  queued: "neutral",
+  running: "info",
+  completed: "success",
+  failed: "danger"
 };
 
-const severityClass: Record<RuleSeverity, string> = {
-  info: "border-sky-300 bg-sky-50 text-sky-700",
-  low: riskClass.low,
-  medium: riskClass.medium,
-  high: riskClass.high,
-  critical: riskClass.critical
+const riskTone: Record<RiskLevel, Tone> = {
+  low: "success",
+  medium: "warning",
+  high: "warning",
+  critical: "danger"
+};
+
+const severityTone: Record<RuleSeverity, Tone> = {
+  info: "info",
+  low: "success",
+  medium: "warning",
+  high: "warning",
+  critical: "danger"
 };
 
 export function StatusBadge({ status }: { status: ScanStatus }) {
-  return <span className={clsx("inline-flex rounded border px-2 py-0.5 text-xs font-medium", statusClass[status])}>{status}</span>;
+  return <Badge tone={statusTone[status]}>{status}</Badge>;
 }
 
 export function RiskBadge({ level }: { level: RiskLevel | null }) {
   if (!level) {
-    return <span className="inline-flex rounded border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">none</span>;
+    return <Badge tone="neutral">none</Badge>;
   }
-  return <span className={clsx("inline-flex rounded border px-2 py-0.5 text-xs font-medium", riskClass[level])}>{level}</span>;
+  return <Badge tone={riskTone[level]}>{level}</Badge>;
 }
 
 export function SeverityBadge({ severity }: { severity?: RuleSeverity | string }) {
-  if (!severity || !(severity in severityClass)) {
-    return <span className="inline-flex rounded border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">none</span>;
+  if (!severity || !(severity in severityTone)) {
+    return <Badge tone="neutral">none</Badge>;
   }
-  return <span className={clsx("inline-flex rounded border px-2 py-0.5 text-xs font-medium", severityClass[severity as RuleSeverity])}>{severity}</span>;
+  return <Badge tone={severityTone[severity as RuleSeverity]}>{severity}</Badge>;
 }
 
-const requestStatusClass: Record<EngineeringRequestStatus, string> = {
-  submitted: "border-slate-300 bg-slate-100 text-slate-700",
-  analyzing: "border-blue-300 bg-blue-50 text-blue-700",
-  plan_ready: "border-violet-300 bg-violet-50 text-violet-700",
-  approved: "border-emerald-300 bg-emerald-50 text-emerald-700",
-  rejected: "border-rose-300 bg-rose-50 text-rose-700",
-  in_progress: "border-blue-300 bg-blue-50 text-blue-700",
-  pr_opened: "border-cyan-300 bg-cyan-50 text-cyan-700",
-  completed: "border-emerald-300 bg-emerald-50 text-emerald-700",
-  failed: "border-rose-300 bg-rose-50 text-rose-700"
+const requestStatusTone: Record<EngineeringRequestStatus, Tone> = {
+  submitted: "neutral",
+  analyzing: "info",
+  plan_ready: "violet",
+  approved: "success",
+  rejected: "danger",
+  in_progress: "info",
+  pr_opened: "cyan",
+  completed: "success",
+  failed: "danger"
 };
 
-const priorityClass: Record<EngineeringRequestPriority, string> = {
-  low: "border-slate-300 bg-slate-100 text-slate-700",
-  medium: "border-sky-300 bg-sky-50 text-sky-700",
-  high: "border-amber-300 bg-amber-50 text-amber-800",
-  urgent: "border-rose-300 bg-rose-50 text-rose-800"
+const priorityTone: Record<EngineeringRequestPriority, Tone> = {
+  low: "neutral",
+  medium: "info",
+  high: "warning",
+  urgent: "danger"
 };
 
 export function RequestStatusBadge({ status }: { status: EngineeringRequestStatus }) {
-  return (
-    <span className={clsx("inline-flex rounded border px-2 py-0.5 text-xs font-medium", requestStatusClass[status])}>
-      {status.replace(/_/g, " ")}
-    </span>
-  );
+  return <Badge tone={requestStatusTone[status]}>{status.replace(/_/g, " ")}</Badge>;
 }
 
 export function PriorityBadge({ priority }: { priority: EngineeringRequestPriority }) {
-  return (
-    <span className={clsx("inline-flex rounded border px-2 py-0.5 text-xs font-medium", priorityClass[priority])}>
-      {priority}
-    </span>
-  );
+  return <Badge tone={priorityTone[priority]}>{priority}</Badge>;
 }
