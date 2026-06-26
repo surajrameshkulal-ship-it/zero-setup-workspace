@@ -8,6 +8,7 @@ import type {
   DeadLetterScan,
   DraftPullRequest,
   EngineeringRequestDetail,
+  EnvironmentSpec,
   EngineeringRequestListItem,
   EngineeringRequestStatus,
   EngineeringRequestType,
@@ -157,6 +158,21 @@ export function generateSetupIntent(repositoryId: string): Promise<SetupIntent> 
 export async function getSetupIntent(repositoryId: string): Promise<SetupIntent | null> {
   try {
     return await apiFetch<SetupIntent>(`/repositories/${repositoryId}/setup-intent`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function generateEnvironmentSpec(repositoryId: string): Promise<EnvironmentSpec> {
+  return apiFetch<EnvironmentSpec>(`/repositories/${repositoryId}/environment-spec`, { method: "POST" });
+}
+
+export async function getEnvironmentSpec(repositoryId: string): Promise<EnvironmentSpec | null> {
+  try {
+    return await apiFetch<EnvironmentSpec>(`/repositories/${repositoryId}/environment-spec`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;

@@ -366,6 +366,52 @@ export type SetupIntent = {
   updated_at: string;
 };
 
+export type EnvironmentSpecEnvVar = { name: string; required: boolean };
+
+export type EnvironmentSpec = {
+  id: string;
+  organization_id: string;
+  repository_id: string;
+  repository_full_name: string | null;
+  primary_language: string | null;
+  runtime_name: string | null;
+  runtime_version: string | null;
+  package_manager: string | null;
+  framework: string | null;
+  install_command: string | null;
+  dev_command: string | null;
+  prod_command: string | null;
+  build_command: string | null;
+  test_command: string | null;
+  lint_command: string | null;
+  health_check_command: string | null;
+  databases: string[];
+  caches: string[];
+  queues: string[];
+  external_services: string[];
+  app_ports: number[];
+  service_ports: number[];
+  health_check_endpoint: string | null;
+  env_vars: EnvironmentSpecEnvVar[];
+  missing_env_example: boolean;
+  container_strategy: string;
+  workspace_requirements: {
+    cpu?: number;
+    memory_mb?: number;
+    disk_mb?: number;
+    network_access?: boolean;
+    persistent_volumes?: string[];
+    [key: string]: unknown;
+  };
+  safety: Record<string, unknown>;
+  confidence_score: number;
+  assumptions: string[];
+  missing_information: string[];
+  warnings: string[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {

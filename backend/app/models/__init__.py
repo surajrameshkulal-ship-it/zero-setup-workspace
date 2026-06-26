@@ -9,6 +9,7 @@ from app.models.engineering_request import (
     RequestStatus,
     RequestType,
 )
+from app.models.environment_spec import EnvironmentSpec
 from app.models.execution_plan import (
     ExecutionComplexity,
     ExecutionPlan,
@@ -36,6 +37,7 @@ __all__ = [
     "CompanyRuleType",
     "DraftPullRequest",
     "EngineeringRequest",
+    "EnvironmentSpec",
     "ExecutionComplexity",
     "ExecutionPlan",
     "ExecutionRun",

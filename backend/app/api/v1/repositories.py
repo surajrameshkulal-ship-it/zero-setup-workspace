@@ -6,11 +6,13 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_admin
 from app.core.database import get_db
+from app.models.environment_spec import EnvironmentSpec
 from app.models.repository import Repository
 from app.models.repository_dna import RepositoryDNA
 from app.models.scan import PullRequestScan
 from app.models.setup_intent import SetupIntent
 from app.models.user import User
+from app.schemas.environment_spec import EnvironmentSpecRead
 from app.schemas.repository import RepositoryConnectRequest, RepositoryRead, RepositoryUpdate
 from app.schemas.repository_dna import RepositoryDNARead
 from app.schemas.scan import ManualScanRequest, ScanListItem, ScanQueuedResponse
@@ -18,6 +20,7 @@ from app.schemas.setup_intent import SetupIntentRead
 from app.services.repository_dna_service import RepositoryDNAService
 from app.services.repository_service import RepositoryService
 from app.services.scan_service import PullRequestScanService
+from app.services.workspace.environment_spec_generator import EnvironmentSpecGenerator
 from app.services.workspace.setup_intent_reader import SetupIntentReader
 
 
@@ -117,6 +120,32 @@ def generate_setup_intent(
 ) -> SetupIntent:
     """Read-only analysis of repository manifests to infer build/run setup."""
     return SetupIntentReader(db).generate(
+        repository_id=repository_id,
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@router.get("/{repository_id}/environment-spec", response_model=EnvironmentSpecRead)
+def get_environment_spec(
+    repository_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> EnvironmentSpec:
+    return EnvironmentSpecGenerator(db).get_for_repository(repository_id, current_user.organization_id)
+
+
+@router.post("/{repository_id}/environment-spec", response_model=EnvironmentSpecRead)
+def generate_environment_spec(
+    repository_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> EnvironmentSpec:
+    """Convert the repository's setup intent into a normalized environment spec.
+
+    Specification only — never launches, executes, or installs anything.
+    """
+    return EnvironmentSpecGenerator(db).generate(
         repository_id=repository_id,
         organization_id=current_user.organization_id,
         actor_user_id=current_user.id,
