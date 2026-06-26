@@ -40,6 +40,47 @@ SUPPORTED_OPERATIONS = {
     "delete_file",
 }
 
+# Common code-generation operation names normalized into supported operations,
+# so AI plans that use generic verbs still apply.
+OPERATION_SYNONYMS = {
+    "create": "create_file",
+    "add": "create_file",
+    "new": "create_file",
+    "add_file": "create_file",
+    "replace": "replace_file",
+    "rewrite": "replace_file",
+    "overwrite": "replace_file",
+    "modify": "replace_file",
+    "update": "replace_file",
+    "edit": "replace_file",
+    "change": "replace_file",
+    "delete": "delete_file",
+    "remove": "delete_file",
+    "remove_file": "delete_file",
+    "insert": "insert_after",
+    "after": "insert_after",
+    "append": "insert_after",
+    "before": "insert_before",
+    "prepend": "insert_before",
+    "replace_text": "replace_block",
+    "replace_section": "replace_block",
+}
+
+
+def normalize_operation_type(raw: str, *, has_target: bool) -> str:
+    """Map a raw operation name to a supported applier operation.
+
+    A 'modify/update/edit' op with a target anchor becomes replace_block (an
+    in-place edit); without a target it becomes replace_file (full content).
+    """
+    op_type = (raw or "").strip().lower()
+    if op_type in SUPPORTED_OPERATIONS:
+        return op_type
+    mapped = OPERATION_SYNONYMS.get(op_type)
+    if mapped == "replace_file" and has_target:
+        return "replace_block"
+    return mapped or op_type
+
 
 @dataclass
 class ApplyResult:
@@ -145,7 +186,12 @@ class SafeChangeApplier:
             )
             logger.info(
                 "change_apply_completed",
-                extra={"dry_run": dry_run, "files_changed": len(files_changed)},
+                extra={
+                    "dry_run": dry_run,
+                    "files_changed": len(files_changed),
+                    "safe_change_operations_count": len(applied_ops),
+                    "safe_change_skipped_reason": [s.get("reason") for s in skipped_ops] or None,
+                },
             )
             return result
         except Exception as exc:  # noqa: BLE001
@@ -210,10 +256,11 @@ class SafeChangeApplier:
             state = plans[rel]
 
             for op in change.get("operations", []):
-                op_type = str(op.get("type", "")).lower()
+                raw_type = str(op.get("type", "")).lower()
+                op_type = normalize_operation_type(raw_type, has_target=bool(op.get("target")))
                 if op_type not in SUPPORTED_OPERATIONS:
-                    skipped_ops.append({"path": rel, "type": op_type, "reason": "unsupported operation"})
-                    warnings.append(f"Unsupported operation '{op_type}' on {rel} was skipped.")
+                    skipped_ops.append({"path": rel, "type": raw_type, "reason": "unsupported operation"})
+                    warnings.append(f"Unsupported operation '{raw_type}' on {rel} was skipped.")
                     continue
                 ok, message = self._apply_op(state, op_type, op)
                 if ok:
@@ -242,12 +289,10 @@ class SafeChangeApplier:
         content = op.get("content", "")
         target = op.get("target", "")
 
-        if op_type == "create_file":
-            state["content"] = content
-            state["deleted"] = False
-            state["touched"] = True
-            return True, ""
-        if op_type == "replace_file":
+        if op_type in ("create_file", "replace_file"):
+            # Never clobber/empty a file with empty content (e.g. a placeholder plan).
+            if content == "":
+                return False, "empty content"
             state["content"] = content
             state["deleted"] = False
             state["touched"] = True

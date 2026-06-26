@@ -166,7 +166,8 @@ class GitHubDraftPRCreator:
             )
             self._reject_forbidden(files, deletions)
             if not files and not deletions:
-                raise AppError("Refusing: no changes were produced to push.")
+                logger.warning("no_workspace_changes_detected", extra={"request_id": str(request.id)})
+                raise AppError("No changes were applied from code generation plan.")
 
             push = self.client.push_branch(
                 owner=repository.owner,
@@ -280,6 +281,14 @@ class GitHubDraftPRCreator:
             actor_user_id=actor_user_id,
             materialization=snapshot,
         )
+        logger.info(
+            "code_generation_file_changes_count",
+            extra={
+                "request_id": str(request.id),
+                "count": len(plan.changes),
+                "files": len(plan.files_to_create) + len(plan.files_to_modify) + len(plan.files_to_delete),
+            },
+        )
 
         handle = WorkspaceHandle(
             workspace_id="draftpr",
@@ -289,19 +298,42 @@ class GitHubDraftPRCreator:
             max_bytes=wm.max_bytes,
         )
         applier = SafeChangeApplier(workspace_manager=wm, handle=handle, db=self.db)
-        applier.apply(
+        result = applier.apply(
             plan.changes, dry_run=False, organization_id=organization_id, actor_user_id=actor_user_id
         )
+        logger.info(
+            "safe_change_operations_count",
+            extra={
+                "request_id": str(request.id),
+                "applied": len(result.applied_operations),
+                "skipped": len(result.skipped_operations),
+                "files_changed": len(result.files_changed),
+            },
+        )
+
+        if not result.files_changed:
+            logger.warning(
+                "no_workspace_changes_detected",
+                extra={
+                    "request_id": str(request.id),
+                    "skipped_reasons": [s.get("reason") for s in result.skipped_operations],
+                },
+            )
+            raise AppError(
+                "No changes were applied from code generation plan. "
+                "The AI plan produced no supported, non-empty file operations."
+            )
 
         workspace = Path(snapshot.workspace_path)
         files: list[tuple[str, str]] = []
-        for rel in list(dict.fromkeys(plan.files_to_create + plan.files_to_modify)):
-            if rel in plan.files_to_delete:
-                continue
+        deletions: list[str] = []
+        for rel in result.files_changed:
             abs_path = workspace / rel
             if abs_path.is_file():
                 files.append((rel, abs_path.read_text(encoding="utf-8", errors="replace")))
-        return files, [d for d in plan.files_to_delete if d]
+            else:
+                deletions.append(rel)  # changed but absent => deleted
+        return files, deletions
 
     # -- helpers ---------------------------------------------------------------
 
