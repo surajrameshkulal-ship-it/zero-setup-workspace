@@ -27,6 +27,7 @@ from app.models.setup_intent import SetupIntent
 from app.models.user import User, UserRole
 from app.models.validation_run import ValidationRun
 from app.models.workspace_blueprint import WorkspaceBlueprint
+from app.models.workspace_launch import WorkspaceLaunch
 from app.models.workspace_provision_plan import WorkspaceProvisionPlan
 
 __all__ = [
@@ -60,6 +61,7 @@ __all__ = [
     "UserRole",
     "ValidationRun",
     "WorkspaceBlueprint",
+    "WorkspaceLaunch",
     "WorkspaceProvisionPlan",
 ]
 

@@ -25,6 +25,7 @@ import type {
   User,
   ValidationRun,
   WorkspaceBlueprint,
+  WorkspaceLaunch,
   WorkspaceProvisionPlan
 } from "@/types/api";
 
@@ -207,6 +208,25 @@ export function generateWorkspaceProvision(repositoryId: string): Promise<Worksp
 export async function getWorkspaceProvision(repositoryId: string): Promise<WorkspaceProvisionPlan | null> {
   try {
     return await apiFetch<WorkspaceProvisionPlan>(`/repositories/${repositoryId}/workspace-provision`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function launchWorkspace(repositoryId: string): Promise<WorkspaceLaunch> {
+  return apiFetch<WorkspaceLaunch>(`/repositories/${repositoryId}/workspace-launch`, { method: "POST" });
+}
+
+export function stopWorkspaceLaunch(repositoryId: string): Promise<WorkspaceLaunch> {
+  return apiFetch<WorkspaceLaunch>(`/repositories/${repositoryId}/workspace-launch/stop`, { method: "POST" });
+}
+
+export async function getWorkspaceLaunch(repositoryId: string): Promise<WorkspaceLaunch | null> {
+  try {
+    return await apiFetch<WorkspaceLaunch>(`/repositories/${repositoryId}/workspace-launch`);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;

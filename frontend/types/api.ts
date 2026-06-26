@@ -520,6 +520,32 @@ export type WorkspaceProvisionPlan = {
   updated_at: string;
 };
 
+export type WorkspaceLaunch = {
+  id: string;
+  organization_id: string;
+  repository_id: string;
+  repository_full_name: string | null;
+  status: "pending" | "launching" | "running" | "healthy" | "unhealthy" | "stopped" | "failed" | "expired" | string;
+  runtime: string | null;
+  image: string | null;
+  start_command: string | null;
+  container_id: string | null;
+  published_url: string | null;
+  port_mappings: Array<{ host: number; container: number }>;
+  health_status: string | null;
+  health_detail: string | null;
+  logs_tail: string[];
+  resource_limits: { cpu?: number; memory_mb?: number; pids_limit?: number; network?: string; [key: string]: unknown };
+  ttl_seconds: number;
+  started_at: string | null;
+  expires_at: string | null;
+  stopped_at: string | null;
+  safety: Record<string, unknown>;
+  failure_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {
