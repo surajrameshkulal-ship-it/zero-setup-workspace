@@ -74,6 +74,29 @@ class GitHubIntegration:
             return []
         return [item["path"] for item in data if isinstance(item, dict) and item.get("type") == "file"]
 
+    def list_repository_tree(self, *, token: str, owner: str, repo: str, ref: str) -> list[str]:
+        """List every file path in the repository (read-only, recursive).
+
+        Uses the Git Trees API. Returns an empty list (never raises) if the tree
+        cannot be read, so language inference can fall back to other evidence.
+        """
+        try:
+            sha = self.get_branch_sha(token=token, owner=owner, repo=repo, branch=ref)
+        except IntegrationError:
+            sha = ref
+        try:
+            response = self._request(
+                "GET",
+                f"/repos/{owner}/{repo}/git/trees/{sha}",
+                token=token,
+                params={"recursive": "1"},
+            )
+        except IntegrationError:
+            return []
+        payload = response.json()
+        tree = payload.get("tree", []) if isinstance(payload, dict) else []
+        return [item["path"] for item in tree if isinstance(item, dict) and item.get("type") == "blob"]
+
     def download_tarball(self, *, token: str, owner: str, repo: str, ref: str) -> bytes:
         """Download a read-only tarball of the repository at a ref (no git binary)."""
         url = f"{self.base_url}/repos/{owner}/{repo}/tarball/{ref}"

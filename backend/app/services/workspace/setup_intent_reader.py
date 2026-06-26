@@ -40,13 +40,76 @@ MANIFEST_FILES = [
     "yarn.lock",
     "requirements.txt",
     "pyproject.toml",
+    "Pipfile",
+    "setup.py",
+    "setup.cfg",
+    "go.mod",
+    "go.sum",
+    "Cargo.toml",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "composer.json",
+    "Gemfile",
+    "Gemfile.lock",
     "Dockerfile",
     "docker-compose.yml",
     "docker-compose.yaml",
     "Makefile",
     ".env.example",
     "Procfile",
+    "index.html",
+    "runtime.txt",
+    ".nvmrc",
+    ".python-version",
+    ".tool-versions",
 ]
+
+# Lightweight source files probed (when present) to detect frameworks from
+# imports when the manifest doesn't list them. Read-only; never executed.
+SOURCE_PROBE_FILES = [
+    "main.py",
+    "app.py",
+    "app/main.py",
+    "manage.py",
+    "wsgi.py",
+    "asgi.py",
+    "src/main.py",
+    "server.js",
+    "index.js",
+    "app.js",
+    "src/index.js",
+    "src/index.ts",
+    "main.go",
+    "cmd/main.go",
+]
+
+# Map file extensions to languages so we can infer the stack from the repository
+# file tree even when no manifest is present.
+EXT_LANGUAGE = {
+    ".py": "Python",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript",
+    ".js": "JavaScript",
+    ".jsx": "JavaScript",
+    ".mjs": "JavaScript",
+    ".cjs": "JavaScript",
+    ".go": "Go",
+    ".rs": "Rust",
+    ".java": "Java",
+    ".kt": "Kotlin",
+    ".rb": "Ruby",
+    ".php": "PHP",
+    ".cs": "C#",
+    ".swift": "Swift",
+    ".html": "HTML",
+    ".htm": "HTML",
+    ".css": "CSS",
+    ".scss": "CSS",
+}
+# Languages that are markup/styling rather than an application runtime.
+NON_RUNTIME_LANGUAGES = {"HTML", "CSS"}
+STATIC_SITE_FRAMEWORK = "Static Website"
 
 JS_FRAMEWORKS = {
     "next": "Next.js",
@@ -114,15 +177,20 @@ class SetupIntentReader:
         organization_id: uuid.UUID,
         actor_user_id: uuid.UUID | None,
         files: dict[str, str] | None = None,
+        file_tree: list[str] | None = None,
         file_provider: Callable[[Repository], dict[str, str]] | None = None,
     ) -> SetupIntent:
         repository = self._require_repository(repository_id, organization_id)
         if files is None:
             provider = file_provider or GitHubManifestFileProvider(self.db)
             files = provider(repository)
+            # Providers may also expose the full file tree for extension-based
+            # inference; tolerate providers (e.g. test fakes) that don't.
+            if file_tree is None:
+                file_tree = getattr(provider, "tree", None)
         dna = RepositoryDNAService(self.db).get_optional(repository_id, organization_id)
 
-        fields = self.build_intent(repository, files, dna)
+        fields = self.build_intent(repository, files, dna, file_tree=file_tree)
 
         intent = self.db.scalar(select(SetupIntent).where(SetupIntent.repository_id == repository.id))
         if intent is None:
@@ -146,9 +214,21 @@ class SetupIntentReader:
 
     # -- inference -------------------------------------------------------------
 
-    def build_intent(self, repository: Repository, files: dict[str, str], dna: Any | None) -> dict:
+    def build_intent(
+        self,
+        repository: Repository,
+        files: dict[str, str],
+        dna: Any | None,
+        file_tree: list[str] | None = None,
+    ) -> dict:
         by_name = {k.split("/")[-1].lower(): v for k, v in files.items()}
         all_text = "\n".join(files.values())
+
+        # The file tree (all repository paths) drives extension-based inference.
+        # Fall back to the analyzed files plus any DNA-observed important files.
+        tree = list(file_tree or [])
+        if not tree:
+            tree = list(files.keys()) + list(getattr(dna, "important_files", None) or [])
 
         languages: set[str] = set(getattr(dna, "languages", None) or [])
         frameworks: set[str] = set(getattr(dna, "frameworks", None) or [])
@@ -239,8 +319,15 @@ class SetupIntentReader:
             for m in re.finditer(r"(?im)^\s*EXPOSE\s+(\d+)", dockerfile):
                 ports.add(int(m.group(1)))
             base = re.search(r"(?im)^\s*FROM\s+([^\s]+)", dockerfile)
-            if base and not runtime_version:
-                runtime_version = self._runtime_from_image(base.group(1))
+            if base:
+                inferred = self._runtime_from_image(base.group(1))
+                if inferred and not runtime_version:
+                    runtime_version = inferred
+                if inferred:
+                    if inferred.startswith("Python"):
+                        languages.add("Python")
+                    elif inferred.startswith("Node"):
+                        languages.add("JavaScript")
 
         # docker-compose
         compose = by_name.get("docker-compose.yml") or by_name.get("docker-compose.yaml")
@@ -290,6 +377,143 @@ class SetupIntentReader:
         elif by_name.get("dockerfile") and "circleci" in all_text.lower():
             cicd_provider = "CircleCI"
 
+        # Go (go.mod)
+        gomod = by_name.get("go.mod")
+        if gomod is not None:
+            languages.add("Go")
+            package_manager = package_manager or "go modules"
+            gv = re.search(r"(?im)^go\s+([0-9.]+)", gomod)
+            if gv and not runtime_version:
+                runtime_version = f"Go {gv.group(1)}"
+            commands["install_command"] = commands["install_command"] or "go mod download"
+            commands["build_command"] = commands["build_command"] or "go build ./..."
+            commands["test_command"] = commands["test_command"] or "go test ./..."
+            commands["prod_command"] = commands["prod_command"] or "go run ."
+            self._classify_text(gomod.lower(), databases, caches, queues, services)
+            if "gin-gonic/gin" in gomod:
+                frameworks.add("Gin")
+            if "labstack/echo" in gomod:
+                frameworks.add("Echo")
+            if "gofiber/fiber" in gomod:
+                frameworks.add("Fiber")
+
+        # Rust (Cargo.toml)
+        cargo = by_name.get("cargo.toml")
+        if cargo is not None:
+            languages.add("Rust")
+            package_manager = package_manager or "cargo"
+            rv = re.search(r'(?im)^\s*rust-version\s*=\s*["\']([^"\']+)["\']', cargo)
+            if rv and not runtime_version:
+                runtime_version = f"Rust {rv.group(1)}"
+            commands["install_command"] = commands["install_command"] or "cargo fetch"
+            commands["build_command"] = commands["build_command"] or "cargo build"
+            commands["test_command"] = commands["test_command"] or "cargo test"
+            commands["prod_command"] = commands["prod_command"] or "cargo run"
+            if "actix-web" in cargo:
+                frameworks.add("Actix Web")
+            if "axum" in cargo:
+                frameworks.add("Axum")
+            if "rocket" in cargo:
+                frameworks.add("Rocket")
+
+        # Java/Kotlin (pom.xml / build.gradle)
+        pom = by_name.get("pom.xml")
+        gradle = by_name.get("build.gradle") or by_name.get("build.gradle.kts")
+        if pom is not None or gradle is not None:
+            languages.add("Java")
+            java_text = (pom or "") + "\n" + (gradle or "")
+            if pom is not None:
+                package_manager = package_manager or "maven"
+                commands["install_command"] = commands["install_command"] or "mvn install -DskipTests"
+                commands["build_command"] = commands["build_command"] or "mvn package"
+                commands["test_command"] = commands["test_command"] or "mvn test"
+            else:
+                package_manager = package_manager or "gradle"
+                commands["install_command"] = commands["install_command"] or "gradle dependencies"
+                commands["build_command"] = commands["build_command"] or "gradle build"
+                commands["test_command"] = commands["test_command"] or "gradle test"
+            if "spring-boot" in java_text or "springframework" in java_text:
+                frameworks.add("Spring Boot")
+                commands["prod_command"] = commands["prod_command"] or "java -jar target/app.jar"
+            self._classify_text(java_text.lower(), databases, caches, queues, services)
+
+        # PHP (composer.json)
+        composer = self._parse_json(by_name.get("composer.json"))
+        if composer is not None:
+            languages.add("PHP")
+            package_manager = package_manager or "composer"
+            commands["install_command"] = commands["install_command"] or "composer install"
+            deps = {**composer.get("require", {}), **composer.get("require-dev", {})}
+            joined = " ".join(deps.keys()).lower()
+            if "laravel/framework" in joined:
+                frameworks.add("Laravel")
+                commands["dev_command"] = commands["dev_command"] or "php artisan serve"
+            if "symfony/" in joined:
+                frameworks.add("Symfony")
+            self._classify_text(joined, databases, caches, queues, services)
+
+        # Ruby (Gemfile)
+        gemfile = by_name.get("gemfile")
+        if gemfile is not None:
+            languages.add("Ruby")
+            package_manager = package_manager or "bundler"
+            commands["install_command"] = commands["install_command"] or "bundle install"
+            lowered = gemfile.lower()
+            if "rails" in lowered:
+                frameworks.add("Ruby on Rails")
+                commands["dev_command"] = commands["dev_command"] or "bin/rails server"
+            if "sinatra" in lowered:
+                frameworks.add("Sinatra")
+            if "rspec" in lowered:
+                commands["test_command"] = commands["test_command"] or "bundle exec rspec"
+            self._classify_text(lowered, databases, caches, queues, services)
+
+        # Pipfile / setup.py (additional Python signals)
+        if by_name.get("pipfile") is not None or by_name.get("setup.py") is not None or by_name.get("setup.cfg") is not None:
+            languages.add("Python")
+            package_manager = package_manager or ("pipenv" if by_name.get("pipfile") else "pip")
+            commands["install_command"] = commands["install_command"] or (
+                "pipenv install" if by_name.get("pipfile") else "pip install -e ."
+            )
+
+        # Runtime version files
+        if by_name.get(".nvmrc") and not runtime_version:
+            runtime_version = f"Node {by_name['.nvmrc'].strip()}"
+        if by_name.get(".python-version") and not runtime_version:
+            runtime_version = f"Python {by_name['.python-version'].strip()}"
+        if by_name.get("runtime.txt") and not runtime_version:
+            rt = by_name["runtime.txt"].strip()
+            m_rt = re.search(r"(python|node|ruby|go)[-/ ]?([0-9.]+)", rt, re.IGNORECASE)
+            if m_rt:
+                runtime_version = f"{m_rt.group(1).title()} {m_rt.group(2)}"
+
+        # Framework inference from source imports (when manifests omit them)
+        self._scan_source_imports(files, frameworks, languages, commands)
+
+        # Extension-based language inference from the repository file tree. This
+        # is the fallback that ensures a valid repository is never classified as
+        # entirely unknown even when no manifest is present.
+        ext_languages = self._languages_from_tree(tree)
+        languages |= ext_languages
+
+        # Static website detection: HTML present, no application backend/manifest.
+        has_backend_manifest = any(
+            by_name.get(n) is not None
+            for n in (
+                "package.json", "requirements.txt", "pyproject.toml", "pipfile", "setup.py",
+                "go.mod", "cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts",
+                "composer.json", "gemfile",
+            )
+        )
+        has_index_html = "index.html" in {p.split("/")[-1].lower() for p in tree} or by_name.get("index.html") is not None
+        if has_index_html and not has_backend_manifest:
+            frameworks.add(STATIC_SITE_FRAMEWORK)
+            languages.add("HTML")
+            commands["dev_command"] = commands["dev_command"] or "python3 -m http.server 8000"
+            commands["prod_command"] = commands["prod_command"] or "python3 -m http.server 8000"
+            if 8000 not in ports:
+                ports.add(8000)
+
         # Health check endpoint
         health = None
         m = re.search(r"(/health[a-z]*|/healthz|/livez|/readyz)", all_text)
@@ -325,6 +549,67 @@ class SetupIntentReader:
             if name in scripts:
                 return f"npm run {name}" if name not in ("start",) else "npm start"
         return None
+
+    @staticmethod
+    def _languages_from_tree(tree: list[str]) -> set[str]:
+        """Infer languages from file extensions across the repository tree."""
+        skip = ("node_modules/", "vendor/", "dist/", "build/", ".venv/", "site-packages/", ".git/")
+        langs: set[str] = set()
+        for path in tree:
+            low = path.lower()
+            if any(seg in low for seg in skip):
+                continue
+            dot = low.rfind(".")
+            if dot == -1:
+                continue
+            lang = EXT_LANGUAGE.get(low[dot:])
+            if lang:
+                langs.add(lang)
+        return langs
+
+    @staticmethod
+    def _scan_source_imports(
+        files: dict[str, str], frameworks: set[str], languages: set[str], commands: dict[str, str | None]
+    ) -> None:
+        """Detect frameworks from imports in a few well-known entrypoint files."""
+        for path in SOURCE_PROBE_FILES:
+            text = files.get(path)
+            if not text:
+                continue
+            low = text.lower()
+            if path.endswith(".py"):
+                languages.add("Python")
+                if "fastapi" in low:
+                    frameworks.add("FastAPI")
+                    commands["dev_command"] = commands["dev_command"] or "uvicorn app.main:app --reload"
+                    commands["prod_command"] = (
+                        commands["prod_command"] or "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+                    )
+                if "flask" in low:
+                    frameworks.add("Flask")
+                if "django" in low:
+                    frameworks.add("Django")
+                if "starlette" in low:
+                    frameworks.add("Starlette")
+            elif path.endswith(".ts"):
+                languages.add("TypeScript")
+                SetupIntentReader._scan_js_frameworks(low, frameworks)
+            elif path.endswith(".js"):
+                languages.add("JavaScript")
+                SetupIntentReader._scan_js_frameworks(low, frameworks)
+            elif path.endswith(".go"):
+                languages.add("Go")
+
+    @staticmethod
+    def _scan_js_frameworks(low: str, frameworks: set[str]) -> None:
+        if "express" in low:
+            frameworks.add("Express")
+        if "next/" in low or "from 'next'" in low or 'from "next"' in low:
+            frameworks.add("Next.js")
+        if "@nestjs" in low:
+            frameworks.add("NestJS")
+        if "fastify" in low:
+            frameworks.add("Fastify")
 
     @staticmethod
     def _classify_dep(dep: str, databases, caches, queues, services) -> None:
@@ -407,6 +692,7 @@ class GitHubManifestFileProvider:
     def __init__(self, db: Session, *, integration: GitHubIntegration | None = None) -> None:
         self.db = db
         self.gh = integration or GitHubIntegration()
+        self.tree: list[str] = []
 
     def __call__(self, repository: Repository) -> dict[str, str]:
         # Fatal: the repository must be connected to a GitHub installation.
@@ -432,7 +718,7 @@ class GitHubManifestFileProvider:
             ) from exc
 
         files: dict[str, str] = {}
-        for path in MANIFEST_FILES:
+        for path in MANIFEST_FILES + SOURCE_PROBE_FILES:
             content = self._safe_get(token, repository, path, ref)
             if content is not None:
                 files[path] = content
@@ -443,6 +729,15 @@ class GitHubManifestFileProvider:
             content = self._safe_get(token, repository, workflow_path, ref)
             if content is not None:
                 files[workflow_path] = content
+
+        # Full file tree drives extension-based language inference. Tolerate
+        # integrations (e.g. test fakes) that don't implement tree listing.
+        tree_fn = getattr(self.gh, "list_repository_tree", None)
+        if callable(tree_fn):
+            try:
+                self.tree = tree_fn(token=token, owner=repository.owner, repo=repository.name, ref=ref) or []
+            except IntegrationError:
+                self.tree = []
         return files
 
     def _safe_get(self, token: str, repository: Repository, path: str, ref: str) -> str | None:

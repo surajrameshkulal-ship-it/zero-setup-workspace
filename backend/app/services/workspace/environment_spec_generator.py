@@ -28,7 +28,10 @@ from app.services.repository_dna_service import RepositoryDNAService
 
 logger = logging.getLogger(__name__)
 
-LANGUAGE_PRIORITY = ["Python", "TypeScript", "JavaScript", "Go", "Rust", "Java", "Ruby", "PHP"]
+LANGUAGE_PRIORITY = [
+    "Python", "TypeScript", "JavaScript", "Go", "Rust", "Java", "Kotlin",
+    "Ruby", "PHP", "C#", "Swift", "HTML", "CSS",
+]
 RUNTIME_BY_LANGUAGE = {
     "Python": "CPython",
     "TypeScript": "Node.js",
@@ -36,19 +39,32 @@ RUNTIME_BY_LANGUAGE = {
     "Go": "Go",
     "Rust": "Rust",
     "Java": "JVM",
+    "Kotlin": "JVM",
     "Ruby": "Ruby",
     "PHP": "PHP",
+    "C#": ".NET",
+    "Swift": "Swift",
+    "HTML": "Browser",
+    "CSS": "Browser",
 }
+STATIC_FRAMEWORKS = {"Static Website", "Static Site"}
 # Frameworks that define how the app runs (preferred as the primary framework).
 APP_FRAMEWORK_PRIORITY = [
     "Next.js", "FastAPI", "Django", "Flask", "Express", "NestJS", "Fastify",
-    "Starlette", "Angular", "Vue", "Svelte", "React",
+    "Starlette", "Spring Boot", "Gin", "Echo", "Fiber", "Actix Web", "Axum",
+    "Rocket", "Laravel", "Symfony", "Ruby on Rails", "Sinatra",
+    "Angular", "Vue", "Svelte", "React", "Static Website",
 ]
 SERVICE_DEFAULT_PORTS = {
     5432: "PostgreSQL", 3306: "MySQL", 6379: "Redis", 27017: "MongoDB",
     5672: "RabbitMQ", 9092: "Kafka", 11211: "Memcached",
 }
-DEFAULT_APP_PORT = {"Next.js": 3000, "React": 3000, "Express": 3000, "NestJS": 3000, "FastAPI": 8000, "Django": 8000, "Flask": 5000}
+DEFAULT_APP_PORT = {
+    "Next.js": 3000, "React": 3000, "Express": 3000, "NestJS": 3000,
+    "FastAPI": 8000, "Django": 8000, "Flask": 5000, "Spring Boot": 8080,
+    "Gin": 8080, "Echo": 8080, "Fiber": 3000, "Laravel": 8000,
+    "Ruby on Rails": 3000, "Static Website": 8000,
+}
 ENV_REQUIRED_HINTS = ("secret", "key", "token", "password", "passwd", "url", "dsn", "database", "host", "credential", "api_key")
 
 
@@ -138,6 +154,12 @@ class EnvironmentSpecGenerator:
         framework = self._primary(list(intent.frameworks or []), APP_FRAMEWORK_PRIORITY)
         if intent.frameworks and len(intent.frameworks) > 1:
             assumptions.append(f"Multiple frameworks detected; using '{framework}' as primary.")
+        # A static website runs in the browser, served by any static file server.
+        if framework in STATIC_FRAMEWORKS:
+            runtime_name = "Browser"
+            if not primary_language:
+                primary_language = "HTML"
+            assumptions.append("Detected a static website; it can be served by any static file server.")
 
         # Commands
         install = intent.install_command
@@ -182,6 +204,8 @@ class EnvironmentSpecGenerator:
             strategy = "docker"
         elif native:
             strategy = "native"
+        elif framework in STATIC_FRAMEWORKS:
+            strategy = "static"
         else:
             strategy = "unknown"
             warnings.append("Could not determine a container/runtime strategy.")
