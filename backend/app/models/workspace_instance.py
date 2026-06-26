@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,7 +17,15 @@ WORKSPACE_STATUSES = (
     "running",
     "failed",
     "stopped",
+    "cancelled",
+    "crashed",
 )
+
+# States in which a repository is considered to already have an active launch.
+ACTIVE_STATUSES = ("pending", "provisioning", "installing", "starting", "running")
+# States that can still be cancelled (i.e. not yet running and not terminal).
+CANCELLABLE_STATUSES = ("pending", "provisioning", "installing", "starting")
+TERMINAL_STATUSES = ("failed", "stopped", "cancelled", "crashed")
 
 
 class WorkspaceInstance(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -66,6 +74,26 @@ class WorkspaceInstance(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stopped_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Structured event timeline: [{"event": str, "at": iso, "detail": str|None}]
+    events: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+    # Liveness / control.
+    last_heartbeat_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    running_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    recovery_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Resource limits (best-effort for local dev; full isolation arrives with
+    # containers in Phase 11.2).
+    cpu_limit: Mapped[float | None] = mapped_column(Float, nullable=True)
+    memory_limit_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    execution_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=1800)
+
+    # Metrics (milliseconds).
+    install_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    startup_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    launch_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     organization = relationship("Organization", back_populates="workspace_instances")
     repository = relationship("Repository")

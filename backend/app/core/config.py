@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     # temp directory is used. workspaces are never created outside this base.
     workspace_root: str | None = None
     workspace_max_size_mb: int = 50
+    # Real sandbox lifecycle hardening (Phase 11.1.x).
+    workspace_default_cpu_limit: float = 1.0
+    workspace_default_memory_mb: int = 1024
+    workspace_execution_timeout_seconds: int = 1800  # max running time before reclaim
+    workspace_heartbeat_timeout_seconds: int = 90  # no liveness within this -> crashed
+    workspace_orphan_ttl_seconds: int = 86400  # terminal instances older than this are purged
+    workspace_auto_recover: bool = False  # restart a crashed sandbox once
     # Safe change applier limits (Phase 10).
     change_apply_max_files: int = 50
     change_apply_max_diff_kb: int = 512

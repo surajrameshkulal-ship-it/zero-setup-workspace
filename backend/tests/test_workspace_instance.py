@@ -41,7 +41,7 @@ class FakeProcess:
         self.started: str | None = None
         self.terminated: list[int] = []
 
-    def start(self, command, *, cwd, env, log_path):
+    def start(self, command, *, cwd, env, log_path, cpu_limit=None, memory_mb=None):
         self.started = command
         Path(log_path).write_text("server listening on port\n", encoding="utf-8")
         return ProcessHandle(pid=4321, log_path=log_path)

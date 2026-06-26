@@ -71,7 +71,16 @@ class CommandRunner(Protocol):
 
 
 class ProcessManager(Protocol):
-    def start(self, command: str, *, cwd: str, env: dict | None, log_path: str) -> ProcessHandle: ...
+    def start(
+        self,
+        command: str,
+        *,
+        cwd: str,
+        env: dict | None,
+        log_path: str,
+        cpu_limit: float | None = None,
+        memory_mb: int | None = None,
+    ) -> ProcessHandle: ...
     def is_running(self, pid: int) -> bool: ...
     def terminate(self, pid: int) -> None: ...
 
@@ -85,6 +94,33 @@ class ReadinessProbe(Protocol):
 
 def _split(command: str) -> list[str]:
     return shlex.split(command)
+
+
+def _rlimit_preexec(cpu_limit: float | None, memory_mb: int | None):
+    """Build a POSIX preexec that applies best-effort CPU/memory rlimits.
+
+    Hard isolation (cgroups) arrives with containers in Phase 11.2; these soft
+    rlimits bound a runaway local-dev sandbox. Returns None if nothing to apply.
+    """
+    if not cpu_limit and not memory_mb:
+        return None
+
+    def _apply() -> None:  # pragma: no cover - runs in the forked child
+        try:
+            import resource
+
+            if memory_mb:
+                limit = int(memory_mb) * 1024 * 1024
+                resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+            if cpu_limit:
+                # Wall-clock isn't an rlimit; bound CPU-seconds generously so a
+                # busy loop is eventually killed without harming idle servers.
+                seconds = max(60, int(cpu_limit * 3600))
+                resource.setrlimit(resource.RLIMIT_CPU, (seconds, seconds))
+        except Exception:
+            pass
+
+    return _apply
 
 
 class SubprocessCommandRunner:
@@ -110,7 +146,16 @@ class SubprocessCommandRunner:
 class LocalProcessManager:
     """Starts a long-running command as a background process, logging to a file."""
 
-    def start(self, command: str, *, cwd: str, env: dict | None, log_path: str) -> ProcessHandle:
+    def start(
+        self,
+        command: str,
+        *,
+        cwd: str,
+        env: dict | None,
+        log_path: str,
+        cpu_limit: float | None = None,
+        memory_mb: int | None = None,
+    ) -> ProcessHandle:
         log_file = open(log_path, "ab", buffering=0)  # noqa: SIM115 - closed when process exits
         proc = subprocess.Popen(  # noqa: S603 - command is operator-selected, run in an isolated dir
             _split(command),
@@ -119,6 +164,7 @@ class LocalProcessManager:
             stdout=log_file,
             stderr=subprocess.STDOUT,
             start_new_session=True,
+            preexec_fn=_rlimit_preexec(cpu_limit, memory_mb) if os.name == "posix" else None,
         )
         return ProcessHandle(pid=proc.pid, log_path=log_path)
 

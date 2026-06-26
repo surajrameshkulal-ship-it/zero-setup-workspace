@@ -9,7 +9,11 @@ from app.api.deps import get_current_user, require_admin
 from app.core.database import get_db
 from app.models.user import User
 from app.models.workspace_instance import WorkspaceInstance
-from app.schemas.workspace_instance import WorkspaceInstanceLogs, WorkspaceInstanceRead
+from app.schemas.workspace_instance import (
+    WorkspaceInstanceLogs,
+    WorkspaceInstanceRead,
+    WorkspaceMetrics,
+)
 from app.services.workspace.workspace_lifecycle import WorkspaceLifecycleService
 
 logger = logging.getLogger(__name__)
@@ -61,6 +65,16 @@ def launch_workspace_instance(
     return instance
 
 
+@router.get("/metrics", response_model=WorkspaceMetrics)
+def workspace_metrics(
+    repository_id: uuid.UUID | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Aggregate launch/install/startup durations, status counts, and failures."""
+    return WorkspaceLifecycleService(db).metrics(current_user.organization_id, repository_id)
+
+
 @router.get("/{workspace_id}", response_model=WorkspaceInstanceRead)
 def get_workspace_instance(
     workspace_id: uuid.UUID,
@@ -86,6 +100,28 @@ def stop_workspace_instance(
     db: Session = Depends(get_db),
 ) -> WorkspaceInstance:
     return WorkspaceLifecycleService(db).stop(workspace_id, current_user.organization_id, current_user.id)
+
+
+@router.post("/{workspace_id}/restart", response_model=WorkspaceInstanceRead, status_code=202)
+def restart_workspace_instance(
+    workspace_id: uuid.UUID,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> WorkspaceInstance:
+    """Stop the sandbox and re-run a fresh lifecycle on the same instance."""
+    instance = WorkspaceLifecycleService(db).restart(workspace_id, current_user.organization_id, current_user.id)
+    _enqueue_launch(instance.id)
+    return instance
+
+
+@router.post("/{workspace_id}/cancel", response_model=WorkspaceInstanceRead)
+def cancel_workspace_instance(
+    workspace_id: uuid.UUID,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> WorkspaceInstance:
+    """Cancel a launch that is still pending/provisioning/installing/starting."""
+    return WorkspaceLifecycleService(db).cancel(workspace_id, current_user.organization_id, current_user.id)
 
 
 @router.delete("/{workspace_id}", status_code=204)

@@ -104,3 +104,36 @@ def launch_workspace_task(workspace_id: str, *, session_factory: Callable = Sess
         return "failed"
     finally:
         db.close()
+
+
+@celery_app.task(name="workspace.reconcile_workspaces_task")
+def reconcile_workspaces_task(*, session_factory: Callable = SessionLocal) -> dict:
+    """Heartbeat/liveness sweep: mark dead or timed-out sandboxes crashed.
+
+    Intended for Celery beat (~every 30s). Never raises out of the worker.
+    """
+    from app.services.workspace.workspace_lifecycle import WorkspaceLifecycleService
+
+    db = session_factory()
+    try:
+        return WorkspaceLifecycleService(db).reconcile()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("reconcile_workspaces_task_error", extra={"error": str(exc)[:300]})
+        return {"error": str(exc)[:200]}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="workspace.cleanup_workspaces_task")
+def cleanup_workspaces_task(*, session_factory: Callable = SessionLocal) -> int:
+    """Purge terminal workspace instances older than the configured TTL."""
+    from app.services.workspace.workspace_lifecycle import WorkspaceLifecycleService
+
+    db = session_factory()
+    try:
+        return WorkspaceLifecycleService(db).cleanup_orphans()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cleanup_workspaces_task_error", extra={"error": str(exc)[:300]})
+        return 0
+    finally:
+        db.close()

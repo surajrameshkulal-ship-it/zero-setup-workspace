@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, Play, Rocket, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, Ban, ExternalLink, Play, RotateCw, Rocket, Square, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/badges";
 import { EmptyState, ErrorState, LoadingState } from "@/components/data-state";
 import { ActionButton, SectionCard } from "@/components/ui";
 import {
+  cancelWorkspaceInstance,
   deleteWorkspaceInstance,
   getLatestWorkspaceInstance,
   getRepository,
   launchWorkspaceInstance,
+  restartWorkspaceInstance,
   stopWorkspaceInstance
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
@@ -19,13 +21,17 @@ import { useApiResource } from "@/hooks/use-api-resource";
 import type { WorkspaceInstance } from "@/types/api";
 
 const TRANSITIONAL = new Set(["pending", "provisioning", "installing", "starting"]);
-const ACTIVE = new Set(["running", "pending", "provisioning", "installing", "starting"]);
+const CANCELLABLE = new Set(["pending", "provisioning", "installing", "starting"]);
 
 function statusTone(status: string) {
   if (status === "running") return "success" as const;
-  if (status === "failed") return "danger" as const;
-  if (status === "stopped") return "neutral" as const;
+  if (status === "failed" || status === "crashed") return "danger" as const;
+  if (status === "stopped" || status === "cancelled") return "neutral" as const;
   return "info" as const;
+}
+
+function ms(value: number | null | undefined): string {
+  return value == null ? "—" : `${(value / 1000).toFixed(1)}s`;
 }
 
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
@@ -79,7 +85,8 @@ export default function LaunchPage({ params }: { params: Promise<{ repositoryId:
     [reload]
   );
 
-  const canStop = instance && ACTIVE.has(instance.status) && instance.status !== "stopped";
+  const canStop = instance?.status === "running";
+  const canCancel = instance ? CANCELLABLE.has(instance.status) : false;
 
   return (
     <AppShell
@@ -128,6 +135,26 @@ export default function LaunchPage({ params }: { params: Promise<{ repositoryId:
                   onClick={() => instance && run("stop", () => stopWorkspaceInstance(instance.id))}
                 >
                   Stop
+                </ActionButton>
+              ) : null}
+              {canCancel ? (
+                <ActionButton
+                  variant="secondary"
+                  icon={Ban}
+                  loading={busy === "cancel"}
+                  onClick={() => instance && run("cancel", () => cancelWorkspaceInstance(instance.id))}
+                >
+                  Cancel
+                </ActionButton>
+              ) : null}
+              {instance ? (
+                <ActionButton
+                  variant="secondary"
+                  icon={RotateCw}
+                  loading={busy === "restart"}
+                  onClick={() => instance && run("restart", () => restartWorkspaceInstance(instance.id))}
+                >
+                  Restart
                 </ActionButton>
               ) : null}
               {instance ? (
@@ -183,6 +210,14 @@ export default function LaunchPage({ params }: { params: Promise<{ repositoryId:
                   <Field label="Install command" value={instance.install_command} />
                   <Field label="Start command" value={instance.runtime_command} />
                   <Field label="Started" value={formatDateTime(instance.created_at)} />
+                  <Field label="Install time" value={ms(instance.install_duration_ms)} />
+                  <Field label="Startup time" value={ms(instance.startup_duration_ms)} />
+                  <Field label="Launch time" value={ms(instance.launch_duration_ms)} />
+                  <Field
+                    label="Limits"
+                    value={`${instance.cpu_limit ?? "—"} CPU · ${instance.memory_limit_mb ?? "—"} MB`}
+                  />
+                  <Field label="Last heartbeat" value={instance.last_heartbeat_at ? formatDateTime(instance.last_heartbeat_at) : null} />
                 </dl>
                 {instance.error_message ? (
                   <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -190,6 +225,23 @@ export default function LaunchPage({ params }: { params: Promise<{ repositoryId:
                   </div>
                 ) : null}
               </SectionCard>
+
+              {instance.events && instance.events.length ? (
+                <SectionCard title="Timeline">
+                  <ol className="space-y-2">
+                    {instance.events.map((e, i) => (
+                      <li key={i} className="flex items-start gap-3 text-sm">
+                        <span className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-brand" aria-hidden="true" />
+                        <div>
+                          <span className="font-medium text-ink">{e.event}</span>
+                          {e.detail ? <span className="text-slate-500"> — {e.detail}</span> : null}
+                          <div className="text-xs text-slate-400">{formatDateTime(e.at)}</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </SectionCard>
+              ) : null}
 
               <SectionCard title="Logs" bodyClassName="p-0">
                 {instance.logs.length === 0 ? (

@@ -553,9 +553,22 @@ export type WorkspaceInstanceStatus =
   | "starting"
   | "running"
   | "failed"
-  | "stopped";
+  | "stopped"
+  | "cancelled"
+  | "crashed";
 
 export type WorkspaceInstanceLog = { stream: string; message: string };
+export type WorkspaceTimelineEvent = { event: string; at: string; detail: string | null };
+
+export type WorkspaceMetrics = {
+  total: number;
+  by_status: Record<string, number>;
+  average_launch_ms: number | null;
+  average_install_ms: number | null;
+  average_startup_ms: number | null;
+  launched: number;
+  failure_reasons: Array<{ reason: string; count: number }>;
+};
 
 export type WorkspaceInstance = {
   id: string;
@@ -574,7 +587,18 @@ export type WorkspaceInstance = {
   preview_url: string | null;
   exposed_ports: number[];
   logs: WorkspaceInstanceLog[];
+  events?: WorkspaceTimelineEvent[];
   error_message: string | null;
+  last_heartbeat_at?: string | null;
+  running_at?: string | null;
+  cancel_requested?: boolean;
+  recovery_attempts?: number;
+  cpu_limit?: number | null;
+  memory_limit_mb?: number | null;
+  execution_timeout_seconds?: number;
+  install_duration_ms?: number | null;
+  startup_duration_ms?: number | null;
+  launch_duration_ms?: number | null;
   stopped_at: string | null;
   created_at: string;
   updated_at: string;

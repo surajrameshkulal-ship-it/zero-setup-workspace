@@ -19,4 +19,16 @@ celery_app.conf.update(
     timezone="UTC",
     worker_prefetch_multiplier=1,
     broker_connection_retry_on_startup=True,
+    beat_schedule={
+        # Heartbeat/liveness sweep for running sandboxes (crashed detection).
+        "workspace-reconcile": {
+            "task": "workspace.reconcile_workspaces_task",
+            "schedule": 30.0,
+        },
+        # Purge terminal sandbox instances older than the configured TTL.
+        "workspace-cleanup": {
+            "task": "workspace.cleanup_workspaces_task",
+            "schedule": 3600.0,
+        },
+    },
 )

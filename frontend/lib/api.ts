@@ -27,6 +27,7 @@ import type {
   WorkspaceBlueprint,
   WorkspaceInstance,
   WorkspaceLaunch,
+  WorkspaceMetrics,
   WorkspaceProvisionPlan
 } from "@/types/api";
 
@@ -262,6 +263,19 @@ export function getWorkspaceInstance(workspaceId: string): Promise<WorkspaceInst
 
 export function stopWorkspaceInstance(workspaceId: string): Promise<WorkspaceInstance> {
   return apiFetch<WorkspaceInstance>(`/workspaces/${workspaceId}/stop`, { method: "POST" });
+}
+
+export function restartWorkspaceInstance(workspaceId: string): Promise<WorkspaceInstance> {
+  return apiFetch<WorkspaceInstance>(`/workspaces/${workspaceId}/restart`, { method: "POST" });
+}
+
+export function cancelWorkspaceInstance(workspaceId: string): Promise<WorkspaceInstance> {
+  return apiFetch<WorkspaceInstance>(`/workspaces/${workspaceId}/cancel`, { method: "POST" });
+}
+
+export function getWorkspaceMetrics(repositoryId?: string): Promise<WorkspaceMetrics> {
+  const q = repositoryId ? `?repository_id=${repositoryId}` : "";
+  return apiFetch<WorkspaceMetrics>(`/workspaces/metrics${q}`);
 }
 
 export function deleteWorkspaceInstance(workspaceId: string): Promise<void> {

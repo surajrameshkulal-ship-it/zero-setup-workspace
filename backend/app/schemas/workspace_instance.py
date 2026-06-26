@@ -22,7 +22,18 @@ class WorkspaceInstanceRead(ORMModel):
     preview_url: str | None
     exposed_ports: list
     logs: list
+    events: list
     error_message: str | None
+    last_heartbeat_at: str | None
+    running_at: str | None
+    cancel_requested: bool
+    recovery_attempts: int
+    cpu_limit: float | None
+    memory_limit_mb: int | None
+    execution_timeout_seconds: int
+    install_duration_ms: int | None
+    startup_duration_ms: int | None
+    launch_duration_ms: int | None
     stopped_at: str | None
     created_at: datetime
     updated_at: datetime
@@ -32,3 +43,14 @@ class WorkspaceInstanceLogs(ORMModel):
     id: uuid.UUID
     status: str
     logs: list
+    events: list
+
+
+class WorkspaceMetrics(ORMModel):
+    total: int
+    by_status: dict
+    average_launch_ms: float | None
+    average_install_ms: float | None
+    average_startup_ms: float | None
+    launched: int
+    failure_reasons: list
