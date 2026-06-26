@@ -14,6 +14,7 @@ import type {
   EngineeringRequestType,
   ExecutionPlan,
   HealthStatus,
+  ProductBrainOverview,
   QueueMetrics,
   Repository,
   RepositoryDNA,
@@ -128,6 +129,10 @@ export function getMe(): Promise<User> {
 
 export function getDashboard(): Promise<DashboardResponse> {
   return apiFetch<DashboardResponse>("/dashboard");
+}
+
+export function getProductBrainOverview(): Promise<ProductBrainOverview> {
+  return apiFetch<ProductBrainOverview>("/product-brain/overview");
 }
 
 export function getHealth(): Promise<HealthStatus> {

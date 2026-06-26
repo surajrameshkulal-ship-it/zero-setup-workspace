@@ -604,6 +604,26 @@ export type WorkspaceInstance = {
   updated_at: string;
 };
 
+export type RoadmapPhase = { id: string; title: string; summary: string };
+export type ProductBlocker = { type: string; severity: string; title: string; reason: string; reference_id: string };
+export type ProductPriority = { title: string; rationale: string; category: string; score: number };
+
+export type ProductBrainOverview = {
+  roadmap: RoadmapPhase[];
+  delivery: {
+    repositories: number;
+    engineering_requests: Record<string, number>;
+    engineering_requests_total: number;
+    workspaces: Record<string, number>;
+    scans_total: number;
+    high_risk_scans: number;
+    [key: string]: unknown;
+  };
+  blockers: ProductBlocker[];
+  priorities: ProductPriority[];
+  summary: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {

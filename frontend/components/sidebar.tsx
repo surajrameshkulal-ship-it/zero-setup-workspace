@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import {
   Bot,
+  Brain,
   GitBranch,
   LayoutDashboard,
   ListChecks,
@@ -35,6 +36,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "AI engineering",
     items: [{ href: "/engineering-requests", label: "Engineering", icon: Bot }]
+  },
+  {
+    label: "Brain",
+    items: [{ href: "/product-brain", label: "Product Brain", icon: Brain }]
   },
   {
     label: "Operations",
