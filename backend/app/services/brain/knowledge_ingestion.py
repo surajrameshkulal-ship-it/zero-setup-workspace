@@ -1,9 +1,9 @@
 """KnowledgeIngestionService — populates the knowledge graph from CodeDNA data.
 
 Read-only ingestion: it reads existing product signals (Repository DNA, scans,
-workspaces, brain decisions, roadmap phases) and the codebase layout (migrations,
-API endpoints, tests, service modules) and upserts knowledge nodes + edges. It
-never executes code or writes to GitHub.
+workspaces, workspace health, brain decisions, audit logs, roadmap phases) and
+the codebase layout (migrations, API endpoints, tests, service modules) and
+upserts knowledge nodes + edges. It never executes code or writes to GitHub.
 """
 
 from __future__ import annotations
@@ -16,11 +16,13 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.audit import AuditLog
 from app.models.brain import BrainDecision
 from app.models.repository import Repository
 from app.models.repository_dna import RepositoryDNA
 from app.models.scan import PullRequestScan, RiskLevel
 from app.models.workspace_instance import WorkspaceInstance
+from app.models.workspace_launch import WorkspaceLaunch
 from app.services.brain.knowledge_service import KnowledgeGraphService
 from app.services.brain.product_brain import ProductBrain
 
@@ -29,7 +31,10 @@ logger = logging.getLogger(__name__)
 _ENDPOINT_RE = re.compile(r"@router\.(get|post|put|patch|delete)\(\s*[\"']([^\"']*)[\"']", re.IGNORECASE)
 MAX_TESTS = 100
 MAX_ENDPOINTS = 250
+MAX_AUDIT_EVENTS = 500
 SERVICE_INTEGRATIONS = {"agent", "execution", "workspace"}  # service dirs that use GitHub
+# Workspace statuses that mean the sandbox is not healthy.
+UNHEALTHY_WORKSPACE_STATUSES = {"crashed", "failed", "error", "unhealthy", "expired"}
 
 
 class KnowledgeIngestionService:
@@ -74,17 +79,56 @@ class KnowledgeIngestionService:
             repo_nodes[repo.id] = node
             add_edge(node, github, "uses", confidence_score=0.7, evidence=[{"source": "platform", "detail": "Connected via GitHub App"}])
 
-        # Workspaces -> belongs_to repository.
+        # Workspaces -> belongs_to repository (+ health classification).
+        ws_nodes: dict[uuid.UUID, object] = {}
         for ws in self.db.scalars(select(WorkspaceInstance).where(WorkspaceInstance.organization_id == organization_id)):
+            healthy = (ws.status or "").lower() not in UNHEALTHY_WORKSPACE_STATUSES
             node = add_node(
                 node_type="workspace", title=f"Sandbox {ws.repository_full_name or ws.repository_id}",
                 source_type="workspace_instance", source_id=str(ws.id),
-                summary=f"Workspace status: {ws.status}.", confidence_score=0.7,
-                metadata={"status": ws.status, "runtime": ws.runtime},
+                summary=f"Workspace status: {ws.status} ({'healthy' if healthy else 'unhealthy'}).",
+                confidence_score=0.7,
+                metadata={
+                    "status": ws.status, "runtime": ws.runtime, "healthy": healthy,
+                    "recovery_attempts": ws.recovery_attempts,
+                    "last_heartbeat_at": ws.last_heartbeat_at,
+                },
             )
+            ws_nodes[ws.id] = node
             repo_node = repo_nodes.get(ws.repository_id)
             if repo_node is not None:
                 add_edge(node, repo_node, "belongs_to", confidence_score=0.8)
+            # Unhealthy sandbox -> a risk node caused_by the workspace.
+            if not healthy:
+                risk = add_node(
+                    node_type="risk",
+                    title=f"Unhealthy sandbox: {ws.repository_full_name or ws.repository_id}",
+                    source_type="workspace_health", source_id=str(ws.id),
+                    summary=ws.error_message or f"Workspace is {ws.status}.", confidence_score=0.75,
+                    metadata={"status": ws.status, "recovery_attempts": ws.recovery_attempts},
+                )
+                add_edge(risk, node, "caused_by", confidence_score=0.7,
+                         evidence=[{"source": "workspace_health", "detail": f"status={ws.status}"}])
+                if repo_node is not None:
+                    add_edge(risk, repo_node, "belongs_to", confidence_score=0.6)
+
+        # Workspace launch health (container health probes) -> related_to workspace.
+        for launch in self.db.scalars(select(WorkspaceLaunch).where(WorkspaceLaunch.organization_id == organization_id)):
+            health = launch.health_status or launch.status
+            if not health:
+                continue
+            launch_healthy = health.lower() not in UNHEALTHY_WORKSPACE_STATUSES
+            node = add_node(
+                node_type="workspace",
+                title=f"Launch health: {health}",
+                source_type="workspace_launch", source_id=str(launch.id),
+                summary=launch.health_detail or launch.failure_reason or f"Launch status {launch.status}.",
+                confidence_score=0.7,
+                metadata={"health_status": launch.health_status, "status": launch.status, "healthy": launch_healthy},
+            )
+            repo_node = repo_nodes.get(launch.repository_id)
+            if repo_node is not None:
+                add_edge(node, repo_node, "belongs_to", confidence_score=0.6)
 
         # Risky scans -> risk nodes belongs_to repository.
         for scan in self.db.scalars(
@@ -109,6 +153,9 @@ class KnowledgeIngestionService:
                 summary=dec.decision, confidence_score=dec.confidence or 0.5,
             )
 
+        # Audit log activity (aggregated by action; never ingests IP/user-agent).
+        self._ingest_audit_logs(organization_id, add_node, add_edge, repo_nodes, ws_nodes)
+
         # Roadmap phases + product blockers.
         product = ProductBrain(self.db)
         overview = product.overview(organization_id)
@@ -130,6 +177,54 @@ class KnowledgeIngestionService:
         self.db.commit()
         logger.info("knowledge_ingested", extra={"organization_id": str(organization_id), **counts})
         return counts
+
+    # -- audit logs ------------------------------------------------------------
+
+    def _ingest_audit_logs(self, organization_id, add_node, add_edge, repo_nodes, ws_nodes) -> None:
+        """Aggregate audit events by action into compact knowledge nodes.
+
+        Only the action, target, and counts are recorded — IP addresses and
+        user-agents are deliberately never ingested into the graph.
+        """
+        rows = self.db.scalars(
+            select(AuditLog)
+            .where(AuditLog.organization_id == organization_id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(MAX_AUDIT_EVENTS)
+        )
+        by_action: dict[str, dict] = {}
+        for log in rows:
+            agg = by_action.setdefault(log.action, {"count": 0, "latest": None})
+            agg["count"] += 1
+            if agg["latest"] is None:
+                agg["latest"] = log
+        for action_name, agg in by_action.items():
+            latest = agg["latest"]
+            node = add_node(
+                node_type="audit", title=f"Activity: {action_name}",
+                source_type="audit_log", source_id=action_name,
+                summary=(
+                    f"{agg['count']} audit event(s); latest target "
+                    f"{latest.target_type or '-'}:{latest.target_id or '-'}."
+                ),
+                confidence_score=0.6,
+                metadata={
+                    "action": action_name, "count": agg["count"],
+                    "target_type": latest.target_type, "target_id": latest.target_id,
+                },
+            )
+            # Link the activity to the repository/workspace it most recently touched.
+            target_node = None
+            if latest.target_id:
+                try:
+                    target_uuid = uuid.UUID(latest.target_id)
+                except (ValueError, AttributeError):
+                    target_uuid = None
+                if target_uuid is not None:
+                    target_node = repo_nodes.get(target_uuid) or ws_nodes.get(target_uuid)
+            if target_node is not None:
+                add_edge(node, target_node, "related_to", confidence_score=0.5,
+                         evidence=[{"source": "audit_log", "detail": action_name}])
 
     # -- codebase layout -------------------------------------------------------
 

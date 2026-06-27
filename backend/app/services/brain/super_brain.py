@@ -90,16 +90,15 @@ class BrainContextBuilder:
 
     @staticmethod
     def _knowledge(db: Session, organization_id: uuid.UUID, question: str | None) -> list[dict]:
-        from app.services.brain.knowledge_service import KnowledgeGraphService
+        from app.services.brain.knowledge_retrieval import KnowledgeRetrievalService
 
         if not question:
             return []
-        graph = KnowledgeGraphService(db)
-        terms = [w.strip(".,?") for w in question.split() if len(w) > 3]
-        nodes = graph.recall(organization_id, terms)
+        retrieval = KnowledgeRetrievalService(db)
+        nodes = retrieval.recall_for_question(organization_id, question)
         return [
             {"id": str(n.id), "node_type": n.node_type, "title": n.title, "confidence": n.confidence_score,
-             "stale": graph.is_stale(n)}
+             "stale": retrieval.is_stale(n)}
             for n in nodes
         ]
 

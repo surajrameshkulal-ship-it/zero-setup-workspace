@@ -182,6 +182,10 @@ export function searchKnowledge(query: string): Promise<KnowledgeNode[]> {
   return apiFetch<KnowledgeNode[]>(`/brain/knowledge/search?query=${encodeURIComponent(query)}`);
 }
 
+export function listStaleKnowledge(): Promise<KnowledgeNode[]> {
+  return apiFetch<KnowledgeNode[]>("/brain/knowledge/stale");
+}
+
 export function getKnowledgeGraph(nodeId: string): Promise<KnowledgeNeighbor> {
   return apiFetch<KnowledgeNeighbor>(`/brain/knowledge/graph?node_id=${nodeId}`);
 }

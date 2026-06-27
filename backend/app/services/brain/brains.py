@@ -17,7 +17,7 @@ from app.models.engineering_request import EngineeringRequest, RequestStatus
 from app.models.scan import PullRequestScan, RiskLevel
 from app.models.validation_run import ValidationRun
 from app.models.workspace_instance import WorkspaceInstance
-from app.services.brain.knowledge_service import KnowledgeGraphService
+from app.services.brain.knowledge_retrieval import KnowledgeRetrievalService
 from app.services.brain.memory_service import BrainMemoryService
 from app.services.brain.product_brain import ProductBrain as ProductBrainService
 from app.services.brain.types import BrainResult, action, evidence
@@ -220,11 +220,10 @@ class KnowledgeBrain(BaseBrain):
     )
 
     def reason(self, task, context, db, organization_id) -> BrainResult:
-        graph = KnowledgeGraphService(db)
-        terms = [w.strip(".,?") for w in task.split() if len(w) > 3]
-        nodes = graph.recall(organization_id, terms)
+        retrieval = KnowledgeRetrievalService(db)
+        nodes = retrieval.recall_for_question(organization_id, task)
         ev = [
-            evidence(n.node_type, n.title + (" [stale]" if graph.is_stale(n) else ""), str(n.id))
+            evidence(n.node_type, n.title + (" [stale]" if retrieval.is_stale(n) else ""), str(n.id))
             for n in nodes
         ]
         actions = []

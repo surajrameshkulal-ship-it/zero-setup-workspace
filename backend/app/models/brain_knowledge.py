@@ -12,6 +12,7 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 NODE_TYPES = (
     "phase", "feature", "module", "service", "model", "endpoint", "migration",
     "test", "decision", "blocker", "risk", "workspace", "repository", "integration",
+    "audit",
 )
 EDGE_TYPES = (
     "depends_on", "implements", "uses", "owns", "caused_by", "fixed_by", "blocks",

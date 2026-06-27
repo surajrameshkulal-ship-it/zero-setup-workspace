@@ -22,7 +22,7 @@ from app.schemas.brain_knowledge import (
     KnowledgeNodeRead,
 )
 from app.services.brain.knowledge_ingestion import KnowledgeIngestionService
-from app.services.brain.knowledge_service import KnowledgeGraphService
+from app.services.brain.knowledge_retrieval import KnowledgeRetrievalService
 from app.services.brain.memory_service import BrainMemoryService
 from app.services.brain.super_brain import SuperBrainOrchestrator
 
@@ -110,7 +110,7 @@ def knowledge_nodes(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    return KnowledgeGraphService(db).list_nodes(
+    return KnowledgeRetrievalService(db).list_nodes(
         current_user.organization_id, node_type=node_type, min_confidence=min_confidence
     )
 
@@ -123,9 +123,18 @@ def knowledge_search(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    return KnowledgeGraphService(db).search(
+    return KnowledgeRetrievalService(db).search(
         current_user.organization_id, query, node_type=node_type, min_confidence=min_confidence
     )
+
+
+@router.get("/knowledge/stale", response_model=list[KnowledgeNodeRead])
+def knowledge_stale(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Knowledge nodes that have not been refreshed recently (re-ingest candidates)."""
+    return KnowledgeRetrievalService(db).stale_nodes(current_user.organization_id)
 
 
 @router.get("/knowledge/graph", response_model=KnowledgeNeighbor)
@@ -134,7 +143,7 @@ def knowledge_graph(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    return KnowledgeGraphService(db).neighborhood(node_id, current_user.organization_id)
+    return KnowledgeRetrievalService(db).neighborhood(node_id, current_user.organization_id)
 
 
 @router.get("/knowledge/nodes/{node_id}", response_model=KnowledgeNodeRead)
@@ -143,7 +152,7 @@ def knowledge_node(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    return KnowledgeGraphService(db).get_node(node_id, current_user.organization_id)
+    return KnowledgeRetrievalService(db).get_node(node_id, current_user.organization_id)
 
 
 @router.post("/knowledge/ingest", response_model=KnowledgeIngestResult)

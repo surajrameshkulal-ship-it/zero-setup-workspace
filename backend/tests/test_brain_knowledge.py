@@ -6,10 +6,12 @@ import pytest
 from sqlalchemy import update
 
 from app.core.errors import NotFoundError
+from app.models.audit import AuditLog
 from app.models.brain import BrainDecision
 from app.models.brain_knowledge import BrainKnowledgeNode
 from app.models.workspace_instance import WorkspaceInstance
 from app.services.brain.knowledge_ingestion import KnowledgeIngestionService
+from app.services.brain.knowledge_retrieval import KnowledgeRetrievalService
 from app.services.brain.knowledge_service import KnowledgeGraphService
 from app.services.brain.super_brain import BrainContextBuilder
 
@@ -98,7 +100,65 @@ def test_ingest_creates_codebase_nodes(api_context) -> None:
     assert g.list_nodes(api_context.organization.id, node_type="service")
 
 
+def test_ingest_workspace_health_flags_unhealthy(api_context) -> None:
+    ws = WorkspaceInstance(
+        organization_id=api_context.organization.id, repository_id=api_context.repository.id,
+        status="crashed", error_message="container exited 137",
+    )
+    api_context.db.add(ws)
+    api_context.db.commit()
+    KnowledgeIngestionService(api_context.db).ingest(api_context.organization.id)
+    g = _graph(api_context)
+    health = g.by_source(api_context.organization.id, "workspace_health", str(ws.id))
+    assert health and health[0].node_type == "risk"
+    nb = g.neighborhood(health[0].id, api_context.organization.id)
+    assert any(e.relationship_type == "caused_by" for e in nb["edges"])
+    assert any(n.node_type == "workspace" for n in nb["neighbors"])
+
+
+def test_ingest_audit_logs_aggregates_by_action(api_context) -> None:
+    for _ in range(2):
+        api_context.db.add(
+            AuditLog(organization_id=api_context.organization.id, action="repository.connected",
+                     target_type="repository", target_id=str(api_context.repository.id), event_metadata={})
+        )
+    api_context.db.commit()
+    KnowledgeIngestionService(api_context.db).ingest(api_context.organization.id)
+    nodes = _graph(api_context).by_source(api_context.organization.id, "audit_log", "repository.connected")
+    assert nodes and nodes[0].node_type == "audit"
+    assert nodes[0].node_metadata["count"] == 2
+
+
+def test_audit_ingest_omits_sensitive_fields(api_context) -> None:
+    api_context.db.add(
+        AuditLog(organization_id=api_context.organization.id, action="user.login", event_metadata={},
+                 ip_address="203.0.113.7", user_agent="secret-agent/1.0")
+    )
+    api_context.db.commit()
+    KnowledgeIngestionService(api_context.db).ingest(api_context.organization.id)
+    nodes = _graph(api_context).by_source(api_context.organization.id, "audit_log", "user.login")
+    assert nodes
+    blob = f"{nodes[0].summary} {nodes[0].node_metadata}"
+    assert "203.0.113.7" not in blob and "secret-agent" not in blob
+
+
 # -- retrieval ----------------------------------------------------------------
+
+
+def test_retrieval_service_recall_and_graph_search(api_context) -> None:
+    g = _graph(api_context)
+    a = g.upsert_node(organization_id=api_context.organization.id, node_type="module", title="Workspace launcher",
+                      source_type="module", source_id="wl", summary="handles workspace launch")
+    b = g.upsert_node(organization_id=api_context.organization.id, node_type="repository", title="acme/app",
+                      source_type="repository", source_id="r1")
+    g.upsert_edge(organization_id=api_context.organization.id, from_node_id=a.id, to_node_id=b.id,
+                  relationship_type="belongs_to")
+    api_context.db.commit()
+    r = KnowledgeRetrievalService(api_context.db)
+    assert r.recall_for_question(api_context.organization.id, "which modules handle workspace launch?")
+    result = r.graph_search(api_context.organization.id, "workspace")
+    assert any(m.id == a.id for m in result["matches"])
+    assert any(n.id == b.id for n in result["related"])
 
 
 def test_search_and_recall(api_context) -> None:
@@ -170,3 +230,7 @@ def test_api_knowledge_flow(api_context) -> None:
 
     search = api_context.client.get(f"{BASE}/search?query=github")
     assert search.status_code == 200
+
+    stale = api_context.client.get(f"{BASE}/stale")
+    assert stale.status_code == 200
+    assert isinstance(stale.json(), list)

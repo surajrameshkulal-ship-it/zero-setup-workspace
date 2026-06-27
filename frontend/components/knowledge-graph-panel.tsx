@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Network, RefreshCw, Search } from "lucide-react";
+import { Clock, Network, RefreshCw, Search } from "lucide-react";
 import { Badge } from "@/components/badges";
 import { ErrorState } from "@/components/data-state";
 import { ActionButton, SectionCard } from "@/components/ui";
-import { getKnowledgeGraph, ingestKnowledge, searchKnowledge } from "@/lib/api";
+import { getKnowledgeGraph, ingestKnowledge, listStaleKnowledge, searchKnowledge } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import type { KnowledgeNeighbor, KnowledgeNode } from "@/types/api";
 
@@ -56,6 +56,21 @@ export function KnowledgeGraphPanel() {
     }
   }, []);
 
+  const showStale = useCallback(async () => {
+    setError(null);
+    setBusy("stale");
+    try {
+      const stale = await listStaleKnowledge();
+      setResults(stale);
+      setSelected(null);
+      setNotice(stale.length ? `${stale.length} stale node(s) — consider re-ingesting.` : "No stale knowledge.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Stale lookup failed");
+    } finally {
+      setBusy(null);
+    }
+  }, []);
+
   const ingest = useCallback(async () => {
     setError(null);
     setNotice(null);
@@ -75,9 +90,14 @@ export function KnowledgeGraphPanel() {
       title="Knowledge graph"
       icon={Network}
       actions={
-        <ActionButton variant="secondary" size="sm" icon={RefreshCw} loading={busy === "ingest"} onClick={ingest}>
-          Ingest
-        </ActionButton>
+        <div className="flex items-center gap-2">
+          <ActionButton variant="secondary" size="sm" icon={Clock} loading={busy === "stale"} onClick={showStale}>
+            Stale
+          </ActionButton>
+          <ActionButton variant="secondary" size="sm" icon={RefreshCw} loading={busy === "ingest"} onClick={ingest}>
+            Ingest
+          </ActionButton>
+        </div>
       }
     >
       <div className="flex flex-col gap-2 sm:flex-row">
