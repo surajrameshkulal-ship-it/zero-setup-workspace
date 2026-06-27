@@ -29,14 +29,53 @@ from app.models.workspace_instance import WorkspaceInstance
 
 logger = logging.getLogger(__name__)
 
-_PHASE_RE = re.compile(r"Phase\s+([0-9]+(?:\.[0-9]+)*)\s*[—\-–:]\s*(.+)", re.IGNORECASE)
 _SEVERITY_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+
+# Phase parsing is tolerant of the common ways roadmaps are written. A line is
+# only treated as a phase if it is a markdown heading/bullet (so prose like
+# "Phase 11 delivers ..." is not mistaken for a phase), or — for backward
+# compatibility — a plain paragraph in the strict "Phase N — Title" form.
+_HEADING_RE = re.compile(r"^\s*(?:#{1,6}\s+|[-*]\s+)(.*)$")
+# Optional "Phase" keyword; separator after the id is optional (handles
+# "Phase 11.1 — Title", "Phase 11.1: Title", and "Phase 11.1 Title").
+_KEYWORD_RE = re.compile(r"^(?:phase\s+)?(\d+(?:\.\d+)*)\b[\s.:)\]—\-–]*\s*(.*)$", re.IGNORECASE)
+# Bare versioned heading without the word "Phase" (requires a dot so section
+# numbers like "## 6. Phases" are not captured): "## 11.1 — Title".
+_VERSION_RE = re.compile(r"^(\d+\.\d+(?:\.\d+)*)\b[\s.:)\]—\-–]*\s*(.*)$")
+# Backward-compatible strict form for non-heading prose lines.
+_PROSE_RE = re.compile(r"(?i)\bphase\s+(\d+(?:\.\d+)*)\s*[—\-–:]\s*(.+)")
+
+
+def _parse_phase_line(raw: str) -> tuple[str, str] | None:
+    """Return (phase_id, rest) if a line describes a roadmap phase, else None."""
+    heading = _HEADING_RE.match(raw)
+    if heading:
+        body = heading.group(1).strip().strip("*").strip("`").strip()
+        # Prefer the explicit "Phase N" form; fall back to a bare dotted version.
+        km = _KEYWORD_RE.match(body)
+        if km and (body[:1].lower() == "p" or "." in km.group(1)):
+            return km.group(1), km.group(2)
+        vm = _VERSION_RE.match(body)
+        if vm:
+            return vm.group(1), vm.group(2)
+        return None
+    prose = _PROSE_RE.search(raw)
+    if prose:
+        return prose.group(1), prose.group(2)
+    return None
 
 
 class ProductBrain:
     def __init__(self, db: Session, *, docs_root: Path | str | None = None) -> None:
         self.db = db
-        self.docs_root = Path(docs_root) if docs_root else self._default_docs_root()
+        # An explicit docs_root is authoritative (used by tests). Otherwise search
+        # several candidate locations so the roadmap is found across repo layouts.
+        if docs_root is not None:
+            self._roots = [Path(docs_root)]
+        else:
+            self._roots = self._candidate_docs_roots()
+        # Kept for backward compatibility / introspection.
+        self.docs_root = self._roots[0] if self._roots else None
 
     # -- public ----------------------------------------------------------------
 
@@ -63,11 +102,11 @@ class ProductBrain:
             except OSError:
                 continue
             for raw in text.splitlines():
-                m = _PHASE_RE.search(raw)
-                if not m:
+                parsed = _parse_phase_line(raw)
+                if not parsed:
                     continue
-                phase_id = m.group(1)
-                rest = m.group(2).strip().lstrip("*").strip()
+                phase_id, rest = parsed
+                rest = rest.strip().lstrip("*").strip()
                 # Split "Title. description" on the first sentence boundary.
                 title, _, summary = rest.partition(".")
                 key = f"{phase_id}:{title.strip().lower()}"
@@ -263,11 +302,29 @@ class ProductBrain:
         return counts
 
     def _roadmap_files(self) -> list[Path]:
-        if not self.docs_root or not self.docs_root.exists():
-            return []
-        return sorted(self.docs_root.glob("*roadmap*.md"))
+        files: dict[str, Path] = {}
+        for root in self._roots:
+            if not root or not root.exists():
+                continue
+            for path in sorted(root.glob("*roadmap*.md")):
+                files.setdefault(path.name, path)  # dedupe by filename across roots
+        return list(files.values())
 
     @staticmethod
-    def _default_docs_root() -> Path:
-        # backend/app/services/brain/product_brain.py -> repo root is parents[4]
-        return Path(__file__).resolve().parents[4] / "docs"
+    def _candidate_docs_roots() -> list[Path]:
+        """Likely locations of a docs/ directory across repo layouts."""
+        here = Path(__file__).resolve()
+        candidates = [
+            here.parents[4] / "docs",  # <repo>/docs (backend/app/services/brain/..)
+            here.parents[3] / "docs",  # <repo>/backend/docs (alt layout)
+            Path.cwd() / "docs",
+            Path.cwd().parent / "docs",
+        ]
+        seen: set[Path] = set()
+        roots: list[Path] = []
+        for c in candidates:
+            rc = c.resolve()
+            if rc not in seen:
+                seen.add(rc)
+                roots.append(rc)
+        return roots
