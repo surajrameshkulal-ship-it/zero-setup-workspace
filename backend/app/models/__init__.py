@@ -1,6 +1,14 @@
 from __future__ import annotations
 from app.models.audit import AuditLog
 from app.models.base import Base
+from app.models.brain import (
+    BrainConversation,
+    BrainDecision,
+    BrainMemory,
+    BrainMessage,
+    BrainRun,
+    BrainStep,
+)
 from app.models.code_generation import CodeGenerationPreview
 from app.models.draft_pull_request import DraftPullRequest
 from app.models.engineering_request import (
@@ -36,6 +44,12 @@ __all__ = [
     "ArchitectureRule",
     "AuditLog",
     "Base",
+    "BrainConversation",
+    "BrainDecision",
+    "BrainMemory",
+    "BrainMessage",
+    "BrainRun",
+    "BrainStep",
     "CodeGenerationPreview",
     "CompanyRule",
     "CompanyRuleType",

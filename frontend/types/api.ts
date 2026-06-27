@@ -624,6 +624,70 @@ export type ProductBrainOverview = {
   summary: string;
 };
 
+export type BrainEvidence = { source: string; detail: string; reference: string | null };
+export type BrainAction = { title: string; rationale: string; brain: string };
+
+export type BrainStep = {
+  id: string;
+  brain: string;
+  order: number;
+  status: string;
+  summary: string;
+  confidence: number;
+  evidence: BrainEvidence[];
+  created_at: string;
+};
+
+export type BrainRun = {
+  id: string;
+  organization_id: string;
+  conversation_id: string | null;
+  question: string;
+  status: string;
+  primary_brain: string | null;
+  brains_consulted: string[];
+  confidence_score: number;
+  answer: string | null;
+  evidence: BrainEvidence[];
+  suggested_actions: BrainAction[];
+  created_at: string;
+  updated_at: string;
+  steps: BrainStep[];
+};
+
+export type BrainConversation = {
+  id: string;
+  organization_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BrainMemory = {
+  id: string;
+  organization_id: string;
+  kind: string;
+  title: string;
+  content: string;
+  tags: string[];
+  source: string | null;
+  refs: unknown[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type BrainDecision = {
+  id: string;
+  organization_id: string;
+  run_id: string | null;
+  title: string;
+  decision: string;
+  rationale: string | null;
+  confidence: number;
+  evidence: BrainEvidence[];
+  created_at: string;
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {

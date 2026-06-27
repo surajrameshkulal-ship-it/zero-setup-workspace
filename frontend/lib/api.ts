@@ -1,6 +1,10 @@
 import type {
   ArchitectureRule,
   AuthResponse,
+  BrainConversation,
+  BrainDecision,
+  BrainMemory,
+  BrainRun,
   CodeGenerationPreview,
   CompanyRule,
   CreateEngineeringRequestPayload,
@@ -133,6 +137,32 @@ export function getDashboard(): Promise<DashboardResponse> {
 
 export function getProductBrainOverview(): Promise<ProductBrainOverview> {
   return apiFetch<ProductBrainOverview>("/product-brain/overview");
+}
+
+// --- Phase 12.0: CodeDNA Super Brain ---
+
+export function askBrain(question: string, conversationId?: string): Promise<BrainRun> {
+  return apiFetch<BrainRun>("/brain/ask", {
+    method: "POST",
+    body: JSON.stringify({ question, conversation_id: conversationId ?? null })
+  });
+}
+
+export function getBrainRun(runId: string): Promise<BrainRun> {
+  return apiFetch<BrainRun>(`/brain/runs/${runId}`);
+}
+
+export function listBrainConversations(): Promise<BrainConversation[]> {
+  return apiFetch<BrainConversation[]>("/brain/conversations");
+}
+
+export function listBrainMemory(query?: string): Promise<BrainMemory[]> {
+  const q = query ? `?query=${encodeURIComponent(query)}` : "";
+  return apiFetch<BrainMemory[]>(`/brain/memory${q}`);
+}
+
+export function listBrainDecisions(): Promise<BrainDecision[]> {
+  return apiFetch<BrainDecision[]>("/brain/decisions");
 }
 
 export function getHealth(): Promise<HealthStatus> {

@@ -5,6 +5,7 @@ from app.api.v1 import (
     admin,
     audit,
     auth,
+    brain,
     dashboard,
     engineering_requests,
     github,
@@ -32,3 +33,4 @@ api_router.include_router(admin.router)
 api_router.include_router(audit.router)
 api_router.include_router(workspaces.router)
 api_router.include_router(product_brain.router)
+api_router.include_router(brain.router)

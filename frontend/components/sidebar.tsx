@@ -39,7 +39,10 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Brain",
-    items: [{ href: "/product-brain", label: "Product Brain", icon: Brain }]
+    items: [
+      { href: "/brain", label: "CodeDNA Brain", icon: Brain },
+      { href: "/product-brain", label: "Product Brain", icon: Brain }
+    ]
   },
   {
     label: "Operations",
