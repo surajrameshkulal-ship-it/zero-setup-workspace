@@ -718,6 +718,32 @@ export type KnowledgeNeighbor = {
   neighbors: KnowledgeNode[];
 };
 
+export type EngineeringOverview = {
+  node_counts: Record<string, number>;
+  edge_counts: Record<string, number>;
+  top_dependencies: Array<{ id: string; node_type: string; title: string; confidence: number; dependents: number }>;
+  orphans: number;
+  total_components: number;
+  summary: string;
+};
+
+export type ImpactResult = {
+  query: string;
+  matches: Array<{ id: string; node_type: string; title: string; confidence: number }>;
+  impacted: Array<{ id: string; node_type: string; title: string; confidence: number; via: string; from: string }>;
+  affected_by_type: Record<string, Array<{ id: string; title: string; via: string }>>;
+  summary: string;
+};
+
+export type ArchitectureFlag = {
+  title: string;
+  severity: string;
+  detail: string;
+  evidence: Array<{ source: string; detail: string; reference: string | null }>;
+};
+
+export type ArchitectureReview = { flags: ArchitectureFlag[]; summary: string };
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {

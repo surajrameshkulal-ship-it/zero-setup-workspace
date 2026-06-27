@@ -1,10 +1,13 @@
 import type {
   ArchitectureRule,
   AuthResponse,
+  ArchitectureReview,
   BrainConversation,
   BrainDecision,
   BrainMemory,
   BrainRun,
+  EngineeringOverview,
+  ImpactResult,
   KnowledgeNeighbor,
   KnowledgeNode,
   CodeGenerationPreview,
@@ -188,6 +191,20 @@ export function listStaleKnowledge(): Promise<KnowledgeNode[]> {
 
 export function getKnowledgeGraph(nodeId: string): Promise<KnowledgeNeighbor> {
   return apiFetch<KnowledgeNeighbor>(`/brain/knowledge/graph?node_id=${nodeId}`);
+}
+
+// --- Phase 12.2: engineering intelligence ---
+
+export function getEngineeringOverview(): Promise<EngineeringOverview> {
+  return apiFetch<EngineeringOverview>("/brain/engineering/overview");
+}
+
+export function getEngineeringImpact(query: string): Promise<ImpactResult> {
+  return apiFetch<ImpactResult>(`/brain/engineering/impact?query=${encodeURIComponent(query)}`);
+}
+
+export function getEngineeringArchitecture(): Promise<ArchitectureReview> {
+  return apiFetch<ArchitectureReview>("/brain/engineering/architecture");
 }
 
 export function getHealth(): Promise<HealthStatus> {

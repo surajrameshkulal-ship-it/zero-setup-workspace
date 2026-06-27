@@ -21,6 +21,13 @@ from app.schemas.brain_knowledge import (
     KnowledgeNeighbor,
     KnowledgeNodeRead,
 )
+from app.schemas.engineering_intelligence import (
+    ArchitectureReview,
+    DependencyResult,
+    EngineeringOverview,
+    ImpactResult,
+)
+from app.services.brain.engineering_intelligence import EngineeringIntelligenceService
 from app.services.brain.knowledge_ingestion import KnowledgeIngestionService
 from app.services.brain.knowledge_retrieval import KnowledgeRetrievalService
 from app.services.brain.memory_service import BrainMemoryService
@@ -159,3 +166,38 @@ def knowledge_node(
 def knowledge_ingest(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Read-only ingestion: rebuild the knowledge graph from current CodeDNA data."""
     return KnowledgeIngestionService(db).ingest(current_user.organization_id)
+
+
+# -- engineering intelligence (Phase 12.2) -----------------------------------
+
+
+@router.get("/engineering/overview", response_model=EngineeringOverview)
+def engineering_overview(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Component map, dependency counts, top dependencies, and orphans."""
+    return EngineeringIntelligenceService(db).overview(current_user.organization_id)
+
+
+@router.get("/engineering/impact", response_model=ImpactResult)
+def engineering_impact(
+    query: str = Query(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Components and likely-affected files connected to a change/topic."""
+    return EngineeringIntelligenceService(db).impact(current_user.organization_id, query)
+
+
+@router.get("/engineering/dependencies", response_model=DependencyResult)
+def engineering_dependencies(
+    node_id: uuid.UUID = Query(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Dependencies and dependents of a component."""
+    return EngineeringIntelligenceService(db).dependencies(current_user.organization_id, node_id)
+
+
+@router.get("/engineering/architecture", response_model=ArchitectureReview)
+def engineering_architecture(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Architecture review: hotspots, orphans, stale knowledge, integration coupling."""
+    return EngineeringIntelligenceService(db).architecture_review(current_user.organization_id)

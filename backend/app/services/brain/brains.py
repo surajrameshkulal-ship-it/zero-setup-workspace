@@ -68,9 +68,16 @@ class ProductBrain(BaseBrain):
 
 class EngineeringBrain(BaseBrain):
     name = "engineering"
-    keywords = ("code", "implement", "feature", "refactor", "engineering", "request", "plan", "pr", "pull request", "impacted", "files", "build")
+    keywords = (
+        "code", "implement", "feature", "refactor", "engineering", "request", "plan", "pr", "pull request",
+        "impacted", "impact", "affected", "files", "build", "module", "modules", "service", "services",
+        "depend", "depends", "dependency", "architecture",
+    )
 
     def reason(self, task, context, db, organization_id) -> BrainResult:
+        from app.services.brain.engineering_intelligence import EngineeringIntelligenceService
+
+        intel = EngineeringIntelligenceService(db)
         counts = self._counts_by_status(db, organization_id)
         total = sum(counts.values())
         ev = [evidence("engineering_requests", f"{v} request(s) in '{k}'", None) for k, v in sorted(counts.items())]
@@ -81,12 +88,33 @@ class EngineeringBrain(BaseBrain):
             actions.append(action(f"Approve {counts['plan_ready']} ready plan(s)", "Approval unblocks execution.", self.name))
         if counts.get("approved"):
             actions.append(action(f"Execute {counts['approved']} approved request(s)", "Generate, validate, and open draft PRs.", self.name))
+
+        # Graph-aware engineering intelligence: architecture overview + impact.
+        overview = intel.overview(organization_id)
+        for dep in overview["top_dependencies"][:3]:
+            ev.append(evidence("dependency", f"{dep['title']} has {dep['dependents']} dependent(s)", dep["id"]))
+        impact_note = ""
+        impact = intel.impact(organization_id, task)
+        if impact["matches"]:
+            artifacts = sum(len(v) for v in impact["affected_by_type"].values())
+            impact_note = f" Impact for this query: {len(impact['matches'])} component(s) matched, {artifacts} artifact(s) likely affected."
+            for entry in impact["impacted"][:4]:
+                ev.append(evidence("impact", f"{entry['title']} (via {entry['via']})", entry["id"]))
+            if impact["impacted"]:
+                actions.append(action("Review impacted components before changing", "These components are connected to your query in the Engineering Graph.", self.name))
+
+        review = intel.architecture_review(organization_id)
+        if review["flags"]:
+            top = review["flags"][0]
+            ev.append(evidence("architecture", top["title"], None))
+
         summary = (
-            f"{total} engineering request(s): " + ", ".join(f"{v} {k}" for k, v in sorted(counts.items()))
-            if total
-            else "No engineering requests yet."
+            (f"{total} engineering request(s): " + ", ".join(f"{v} {k}" for k, v in sorted(counts.items())) if total else "No engineering requests yet.")
+            + f" {overview['summary']}"
+            + impact_note
         )
-        return BrainResult(self.name, 0.7 if total else 0.4, summary, ev, actions)
+        confidence = 0.8 if (total or overview["total_components"]) else 0.4
+        return BrainResult(self.name, confidence, summary, ev, actions)
 
 
 class DebugBrain(BaseBrain):

@@ -17,6 +17,7 @@ import { Badge } from "@/components/badges";
 import { ErrorState } from "@/components/data-state";
 import { ActionButton, SectionCard } from "@/components/ui";
 import { KnowledgeGraphPanel } from "@/components/knowledge-graph-panel";
+import { EngineeringIntelligencePanel } from "@/components/engineering-intelligence-panel";
 import {
   askBrain,
   getHealth,
@@ -218,6 +219,9 @@ export default function BrainPage() {
 
         {/* Knowledge graph */}
         <KnowledgeGraphPanel />
+
+        {/* Engineering intelligence */}
+        <EngineeringIntelligencePanel />
 
         {/* Intelligence cards */}
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
