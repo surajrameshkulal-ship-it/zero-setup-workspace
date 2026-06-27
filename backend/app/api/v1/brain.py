@@ -16,6 +16,13 @@ from app.schemas.brain import (
     BrainMemoryRead,
     BrainRunRead,
 )
+from app.schemas.brain_knowledge import (
+    KnowledgeIngestResult,
+    KnowledgeNeighbor,
+    KnowledgeNodeRead,
+)
+from app.services.brain.knowledge_ingestion import KnowledgeIngestionService
+from app.services.brain.knowledge_service import KnowledgeGraphService
 from app.services.brain.memory_service import BrainMemoryService
 from app.services.brain.super_brain import SuperBrainOrchestrator
 
@@ -91,3 +98,55 @@ def brain_memory_create(
 @router.get("/decisions", response_model=list[BrainDecisionRead])
 def brain_decisions(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     return BrainMemoryService(db).list_decisions(current_user.organization_id)
+
+
+# -- knowledge graph (Phase 12.1) --------------------------------------------
+
+
+@router.get("/knowledge/nodes", response_model=list[KnowledgeNodeRead])
+def knowledge_nodes(
+    node_type: str | None = Query(default=None),
+    min_confidence: float = Query(default=0.0),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return KnowledgeGraphService(db).list_nodes(
+        current_user.organization_id, node_type=node_type, min_confidence=min_confidence
+    )
+
+
+@router.get("/knowledge/search", response_model=list[KnowledgeNodeRead])
+def knowledge_search(
+    query: str = Query(...),
+    node_type: str | None = Query(default=None),
+    min_confidence: float = Query(default=0.0),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return KnowledgeGraphService(db).search(
+        current_user.organization_id, query, node_type=node_type, min_confidence=min_confidence
+    )
+
+
+@router.get("/knowledge/graph", response_model=KnowledgeNeighbor)
+def knowledge_graph(
+    node_id: uuid.UUID = Query(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return KnowledgeGraphService(db).neighborhood(node_id, current_user.organization_id)
+
+
+@router.get("/knowledge/nodes/{node_id}", response_model=KnowledgeNodeRead)
+def knowledge_node(
+    node_id: uuid.UUID,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return KnowledgeGraphService(db).get_node(node_id, current_user.organization_id)
+
+
+@router.post("/knowledge/ingest", response_model=KnowledgeIngestResult)
+def knowledge_ingest(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Read-only ingestion: rebuild the knowledge graph from current CodeDNA data."""
+    return KnowledgeIngestionService(db).ingest(current_user.organization_id)

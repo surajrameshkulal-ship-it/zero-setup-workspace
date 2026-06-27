@@ -5,6 +5,8 @@ import type {
   BrainDecision,
   BrainMemory,
   BrainRun,
+  KnowledgeNeighbor,
+  KnowledgeNode,
   CodeGenerationPreview,
   CompanyRule,
   CreateEngineeringRequestPayload,
@@ -163,6 +165,25 @@ export function listBrainMemory(query?: string): Promise<BrainMemory[]> {
 
 export function listBrainDecisions(): Promise<BrainDecision[]> {
   return apiFetch<BrainDecision[]>("/brain/decisions");
+}
+
+// --- Phase 12.1: knowledge graph ---
+
+export function ingestKnowledge(): Promise<{ nodes: number; edges: number }> {
+  return apiFetch<{ nodes: number; edges: number }>("/brain/knowledge/ingest", { method: "POST" });
+}
+
+export function listKnowledgeNodes(nodeType?: string): Promise<KnowledgeNode[]> {
+  const q = nodeType ? `?node_type=${encodeURIComponent(nodeType)}` : "";
+  return apiFetch<KnowledgeNode[]>(`/brain/knowledge/nodes${q}`);
+}
+
+export function searchKnowledge(query: string): Promise<KnowledgeNode[]> {
+  return apiFetch<KnowledgeNode[]>(`/brain/knowledge/search?query=${encodeURIComponent(query)}`);
+}
+
+export function getKnowledgeGraph(nodeId: string): Promise<KnowledgeNeighbor> {
+  return apiFetch<KnowledgeNeighbor>(`/brain/knowledge/graph?node_id=${nodeId}`);
 }
 
 export function getHealth(): Promise<HealthStatus> {

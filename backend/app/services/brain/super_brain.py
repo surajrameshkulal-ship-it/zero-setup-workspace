@@ -65,14 +65,19 @@ class BrainRouter:
 
 
 class BrainContextBuilder:
-    """Builds the shared, read-only situational context for a run."""
+    """Builds the shared, read-only situational context for a run.
 
-    def build(self, db: Session, organization_id: uuid.UUID) -> dict:
+    Includes a knowledge-graph recall for the question so brains can ground their
+    reasoning in persistent product knowledge.
+    """
+
+    def build(self, db: Session, organization_id: uuid.UUID, question: str | None = None) -> dict:
         product = ProductBrainService(db)
         overview = product.overview(organization_id)
         repositories = db.scalar(
             select(Repository).where(Repository.organization_id == organization_id)
         )
+        knowledge = self._knowledge(db, organization_id, question)
         return {
             "summary": overview["summary"],
             "delivery": overview["delivery"],
@@ -80,7 +85,23 @@ class BrainContextBuilder:
             "priorities": overview["priorities"],
             "roadmap_phase_count": len(overview["roadmap"]),
             "has_repositories": repositories is not None,
+            "knowledge": knowledge,
         }
+
+    @staticmethod
+    def _knowledge(db: Session, organization_id: uuid.UUID, question: str | None) -> list[dict]:
+        from app.services.brain.knowledge_service import KnowledgeGraphService
+
+        if not question:
+            return []
+        graph = KnowledgeGraphService(db)
+        terms = [w.strip(".,?") for w in question.split() if len(w) > 3]
+        nodes = graph.recall(organization_id, terms)
+        return [
+            {"id": str(n.id), "node_type": n.node_type, "title": n.title, "confidence": n.confidence_score,
+             "stale": graph.is_stale(n)}
+            for n in nodes
+        ]
 
 
 # -- reasoning ----------------------------------------------------------------
@@ -211,7 +232,7 @@ class SuperBrainOrchestrator:
         self.db.add(run)
         self.db.flush()
 
-        context = self.context_builder.build(self.db, organization_id)
+        context = self.context_builder.build(self.db, organization_id, question)
         routed = self.router.route(question)
 
         results: list[BrainResult] = []

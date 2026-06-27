@@ -9,6 +9,7 @@ from app.models.brain import (
     BrainRun,
     BrainStep,
 )
+from app.models.brain_knowledge import BrainKnowledgeEdge, BrainKnowledgeNode
 from app.models.code_generation import CodeGenerationPreview
 from app.models.draft_pull_request import DraftPullRequest
 from app.models.engineering_request import (
@@ -46,6 +47,8 @@ __all__ = [
     "Base",
     "BrainConversation",
     "BrainDecision",
+    "BrainKnowledgeEdge",
+    "BrainKnowledgeNode",
     "BrainMemory",
     "BrainMessage",
     "BrainRun",

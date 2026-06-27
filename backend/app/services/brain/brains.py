@@ -17,6 +17,7 @@ from app.models.engineering_request import EngineeringRequest, RequestStatus
 from app.models.scan import PullRequestScan, RiskLevel
 from app.models.validation_run import ValidationRun
 from app.models.workspace_instance import WorkspaceInstance
+from app.services.brain.knowledge_service import KnowledgeGraphService
 from app.services.brain.memory_service import BrainMemoryService
 from app.services.brain.product_brain import ProductBrain as ProductBrainService
 from app.services.brain.types import BrainResult, action, evidence
@@ -210,6 +211,34 @@ class MemoryBrain(BaseBrain):
         return BrainResult(self.name, 0.6 if matches else 0.25, summary, ev, actions)
 
 
+class KnowledgeBrain(BaseBrain):
+    name = "knowledge"
+    keywords = (
+        "which", "module", "modules", "service", "services", "depend", "depends", "handle", "handles",
+        "graph", "knowledge", "recently", "changed", "risk", "risks", "endpoint", "migration", "where",
+        "connected", "related",
+    )
+
+    def reason(self, task, context, db, organization_id) -> BrainResult:
+        graph = KnowledgeGraphService(db)
+        terms = [w.strip(".,?") for w in task.split() if len(w) > 3]
+        nodes = graph.recall(organization_id, terms)
+        ev = [
+            evidence(n.node_type, n.title + (" [stale]" if graph.is_stale(n) else ""), str(n.id))
+            for n in nodes
+        ]
+        actions = []
+        if not nodes:
+            actions.append(action("Ingest knowledge", "The graph has no matching knowledge yet; run ingestion.", self.name))
+        summary = (
+            f"Found {len(nodes)} related knowledge node(s): "
+            + ", ".join(f"{n.node_type}:{n.title}" for n in nodes[:4])
+            if nodes
+            else "No matching knowledge in the graph yet."
+        )
+        return BrainResult(self.name, 0.7 if nodes else 0.3, summary, ev, actions)
+
+
 def build_brains() -> list[BaseBrain]:
     return [
         ProductBrain(),
@@ -219,4 +248,5 @@ def build_brains() -> list[BaseBrain]:
         SecurityBrain(),
         PlanningBrain(),
         MemoryBrain(),
+        KnowledgeBrain(),
     ]

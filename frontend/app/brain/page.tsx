@@ -16,6 +16,7 @@ import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/badges";
 import { ErrorState } from "@/components/data-state";
 import { ActionButton, SectionCard } from "@/components/ui";
+import { KnowledgeGraphPanel } from "@/components/knowledge-graph-panel";
 import {
   askBrain,
   getHealth,
@@ -214,6 +215,9 @@ export default function BrainPage() {
             <p className="mt-3 text-xs text-slate-400">Run {run.id} · {formatDateTime(run.created_at)}</p>
           </SectionCard>
         ) : null}
+
+        {/* Knowledge graph */}
+        <KnowledgeGraphPanel />
 
         {/* Intelligence cards */}
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

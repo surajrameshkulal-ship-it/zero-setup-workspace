@@ -688,6 +688,36 @@ export type BrainDecision = {
   created_at: string;
 };
 
+export type KnowledgeNode = {
+  id: string;
+  organization_id: string;
+  node_type: string;
+  title: string;
+  summary: string;
+  source_type: string | null;
+  source_id: string | null;
+  confidence_score: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KnowledgeEdge = {
+  id: string;
+  from_node_id: string;
+  to_node_id: string;
+  relationship_type: string;
+  confidence_score: number;
+  evidence: unknown[];
+  created_at: string;
+};
+
+export type KnowledgeNeighbor = {
+  node: KnowledgeNode;
+  edges: KnowledgeEdge[];
+  neighbors: KnowledgeNode[];
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {
