@@ -27,6 +27,14 @@ from app.schemas.engineering_intelligence import (
     EngineeringOverview,
     ImpactResult,
 )
+from app.schemas.debug import (
+    DebugDiagnosisRead,
+    DebugFailureDetail,
+    DebugFailureRead,
+    DebugPattern,
+    DiagnoseRequest,
+)
+from app.services.brain.debug_intelligence import DebugIntelligenceService
 from app.services.brain.engineering_intelligence import EngineeringIntelligenceService
 from app.services.brain.knowledge_ingestion import KnowledgeIngestionService
 from app.services.brain.knowledge_retrieval import KnowledgeRetrievalService
@@ -201,3 +209,45 @@ def engineering_dependencies(
 def engineering_architecture(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """Architecture review: hotspots, orphans, stale knowledge, integration coupling."""
     return EngineeringIntelligenceService(db).architecture_review(current_user.organization_id)
+
+
+# -- debug intelligence (Phase 12.3) -----------------------------------------
+
+
+@router.post("/debug/diagnose", response_model=DebugDiagnosisRead)
+def debug_diagnose(
+    payload: DiagnoseRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Read-only root-cause analysis of a failure log. No code changes are made."""
+    return DebugIntelligenceService(db).diagnose(
+        organization_id=current_user.organization_id,
+        logs=payload.logs,
+        source=payload.source or "manual",
+        source_ref=payload.source_ref,
+    )
+
+
+@router.get("/debug/failures", response_model=list[DebugFailureRead])
+def debug_failures(
+    failure_type: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return DebugIntelligenceService(db).list_failures(current_user.organization_id, failure_type=failure_type)
+
+
+@router.get("/debug/patterns", response_model=list[DebugPattern])
+def debug_patterns(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Recurring failure patterns grouped by normalized signature."""
+    return DebugIntelligenceService(db).patterns(current_user.organization_id)
+
+
+@router.get("/debug/failures/{failure_id}", response_model=DebugFailureDetail)
+def debug_failure_detail(
+    failure_id: uuid.UUID,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return DebugIntelligenceService(db).get_failure(failure_id, current_user.organization_id)

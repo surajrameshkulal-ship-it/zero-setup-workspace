@@ -744,6 +744,49 @@ export type ArchitectureFlag = {
 
 export type ArchitectureReview = { flags: ArchitectureFlag[]; summary: string };
 
+export type DebugEvidence = { source: string; detail: string; reference: string | null };
+
+export type DebugFailure = {
+  id: string;
+  organization_id: string;
+  failure_type: string;
+  source: string | null;
+  source_ref: string | null;
+  title: string;
+  signature: string;
+  affected_files: string[];
+  affected_services: string[];
+  severity: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DebugDiagnosis = {
+  id: string;
+  organization_id: string;
+  failure_id: string;
+  summary: string;
+  probable_cause: string;
+  affected_files: string[];
+  affected_services: string[];
+  related_graph_nodes: Array<{ id: string; node_type: string; title: string }>;
+  severity: string;
+  confidence_score: number;
+  evidence: DebugEvidence[];
+  recommended_fix: string;
+  created_at: string;
+  failure?: DebugFailure | null;
+};
+
+export type DebugPattern = {
+  signature: string;
+  failure_type: string;
+  count: number;
+  example_title: string;
+  last_seen: string | null;
+  affected_files: string[];
+};
+
 export type ExecutionSafetyStatus = "safe" | "needs_approval" | "blocked";
 
 export type ExecutionTask = {

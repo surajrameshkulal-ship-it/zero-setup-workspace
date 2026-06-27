@@ -6,6 +6,9 @@ import type {
   BrainDecision,
   BrainMemory,
   BrainRun,
+  DebugDiagnosis,
+  DebugFailure,
+  DebugPattern,
   EngineeringOverview,
   ImpactResult,
   KnowledgeNeighbor,
@@ -205,6 +208,23 @@ export function getEngineeringImpact(query: string): Promise<ImpactResult> {
 
 export function getEngineeringArchitecture(): Promise<ArchitectureReview> {
   return apiFetch<ArchitectureReview>("/brain/engineering/architecture");
+}
+
+// --- Phase 12.3: debug intelligence ---
+
+export function diagnoseFailure(logs: string, source = "manual"): Promise<DebugDiagnosis> {
+  return apiFetch<DebugDiagnosis>("/brain/debug/diagnose", {
+    method: "POST",
+    body: JSON.stringify({ logs, source })
+  });
+}
+
+export function listDebugFailures(): Promise<DebugFailure[]> {
+  return apiFetch<DebugFailure[]>("/brain/debug/failures");
+}
+
+export function getDebugPatterns(): Promise<DebugPattern[]> {
+  return apiFetch<DebugPattern[]>("/brain/debug/patterns");
 }
 
 export function getHealth(): Promise<HealthStatus> {

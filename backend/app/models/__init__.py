@@ -11,6 +11,7 @@ from app.models.brain import (
 )
 from app.models.brain_knowledge import BrainKnowledgeEdge, BrainKnowledgeNode
 from app.models.code_generation import CodeGenerationPreview
+from app.models.debug import DebugDiagnosis, DebugFailure
 from app.models.draft_pull_request import DraftPullRequest
 from app.models.engineering_request import (
     EngineeringRequest,
@@ -54,6 +55,8 @@ __all__ = [
     "BrainRun",
     "BrainStep",
     "CodeGenerationPreview",
+    "DebugDiagnosis",
+    "DebugFailure",
     "CompanyRule",
     "CompanyRuleType",
     "DraftPullRequest",

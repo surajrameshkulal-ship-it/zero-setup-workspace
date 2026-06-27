@@ -148,12 +148,32 @@ class DebugBrain(BaseBrain):
         for w in crashed[:5]:
             ev.append(evidence("workspace", w.error_message or f"Sandbox {w.status}", str(w.id)))
 
-        count = len(ev)
+        # Debug Intelligence: most recent diagnoses with root cause + fix.
+        from app.models.debug import DebugDiagnosis
+
+        diagnoses = db.scalars(
+            select(DebugDiagnosis)
+            .where(DebugDiagnosis.organization_id == organization_id)
+            .order_by(DebugDiagnosis.created_at.desc())
+            .limit(5)
+        ).all()
         actions = []
-        if count:
-            actions.append(action("Investigate the most recent failure", "Start from the highest-severity evidence below.", self.name))
-        summary = f"Detected {count} active failure signal(s)." if count else "No active failures detected."
-        return BrainResult(self.name, 0.75 if count else 0.3, summary, ev, actions)
+        diag_note = ""
+        for d in diagnoses:
+            ev.append(evidence("diagnosis", f"{d.summary} (cause: {d.probable_cause})", str(d.failure_id)))
+            if d.affected_files:
+                ev.append(evidence("affected_files", ", ".join(d.affected_files[:3]), None))
+        if diagnoses:
+            top = diagnoses[0]
+            diag_note = f" Latest diagnosis: {top.summary} Recommended fix: {top.recommended_fix}"
+            actions.append(action("Apply the recommended fix", top.recommended_fix, self.name))
+        elif ev:
+            actions.append(action("Diagnose the latest failure", "Paste the failing logs into Debug Intelligence for a root-cause analysis.", self.name))
+
+        count = len(ev)
+        summary = (f"Detected {len(failed_reqs) + len(failed_val) + len(crashed)} active failure signal(s)." if count else "No active failures detected.") + diag_note
+        confidence = 0.8 if diagnoses else (0.6 if count else 0.3)
+        return BrainResult(self.name, confidence, summary, ev, actions)
 
 
 class WorkspaceBrain(BaseBrain):
